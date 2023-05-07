@@ -1,0 +1,79 @@
+{
+    "vision_pipeline": [
+        {
+            "BGR2GRAY": {
+                "active": "True"
+            }
+        },
+        {
+            "threshold": {
+                "active": "True",
+                "thresh": 160,
+                "maxval": 200,
+                "type": "THRESH_BINARY"
+            }
+        },
+        {
+            "adaptiveThreshold": {
+                "active": "False",
+                "maxValue": 100,
+                "adaptiveMethod": "ADAPTIVE_THRESH_GAUSSIAN_C",
+                "thresholdType": "THRESH_BINARY",
+                "blockSize": 11,
+                "C": 2
+            }
+        },
+        {
+            "Canny": {
+                "active": "False",
+                "threshold1": 100,
+                "threshold2": 200,
+                "aperatureSize": 5,
+                "L2gradient": "nothing"
+            }
+        },
+        {
+            "findContours": {
+                "active": "True",
+                "draw_contours": "True",
+                "mode": "RETR_EXTERNAL",
+                "method": "CHAIN_APPROX_SIMPLE",
+                "fill":"True"
+            }
+        },
+        {
+            "Morphology_Ex_Opening": {
+                "active": "True",
+                "kernelsize": 9
+            }
+        },
+        {
+            "select_Area": {
+                "active": "True",
+                "mode": "RETR_LIST",
+                "method": "CHAIN_APPROX_SIMPLE",
+                "max_area": 2000000,
+                "min_area": 20000
+            }
+        },
+        {
+            "bitwise_not": {
+                "active": "False"
+            }
+        },
+
+        {
+            "HoughCircles": {
+                "active": "True",
+                "draw_circles": "True",
+                "method": "HOUGH_GRADIENT",
+                "dp": 1,
+                "minDist": 10,
+                "param1": 50,
+                "param2": 30,
+                "minRadius": 40,
+                "maxRadius": 5000
+            }
+        }
+    ]
+}
