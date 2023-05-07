@@ -1,7 +1,6 @@
 import cv2 # OpenCV library
 
 def match_vision_function(frame_processed, FileData, key):
-    print("test")
     match key:
         case "theshold":
             function_parameter = FileData [key]

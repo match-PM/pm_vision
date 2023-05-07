@@ -1,6 +1,12 @@
 {
     "vision_pipeline": [
         {
+            "Draw_Grid": {
+                "active": "True",
+                "grid_spacing": 200
+            }
+        },
+        {
             "BGR2GRAY": {
                 "active": "True"
             }
@@ -34,7 +40,7 @@
         },
         {
             "findContours": {
-                "active": "True",
+                "active": "False",
                 "draw_contours": "True",
                 "mode": "RETR_EXTERNAL",
                 "method": "CHAIN_APPROX_SIMPLE",
@@ -52,7 +58,7 @@
                 "active": "True",
                 "mode": "RETR_LIST",
                 "method": "CHAIN_APPROX_SIMPLE",
-                "max_area": 10000,
+                "max_area": 100000,
                 "min_area": 5000
             }
         },
@@ -72,14 +78,14 @@
         },
         {
             "HoughCircles": {
-                "active": "True",
+                "active": "False",
                 "draw_circles": "True",
                 "method": "HOUGH_GRADIENT",
-                "dp": 1,
-                "minDist": 20,
+                "dp": 8,
+                "minDist": 30,
                 "param1": 5,
                 "param2": 1,
-                "minRadius": 25,
+                "minRadius": 30,
                 "maxRadius": 40
             }
         },
@@ -87,12 +93,7 @@
             "Errosion": {
                 "active": "False"
             }
-        },
-        {
-            "Draw_Grid": {
-                "active": "True",
-                "grid_spacing": 10
-            }
         }
+
     ]
 }

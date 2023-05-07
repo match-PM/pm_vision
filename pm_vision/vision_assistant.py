@@ -11,9 +11,10 @@ from sensor_msgs.msg import Image # Image is the message type
 from cv_bridge import CvBridge # Package to convert between ROS and OpenCV Images
 import cv2 # OpenCV library
 import json
+from ament_index_python.packages import get_package_share_directory
 from pm_vision.vision_utils import match_vision_function
 import numpy as np
-
+import os
 
 
 def Conv_Pixel_Top_Left_TO_Center(img_width, img_height, x, y):
@@ -29,51 +30,48 @@ class ImagePublisher(Node):
     """
     Class constructor to set up the node
     """
-    # Initiate the Node class's constructor and give it a name
-    super().__init__('image_publisher')
-    self.file_path= '/home/niklas/ros2_ws/src/pm_vision/vision_processes/test_function.json'
-    # Create the publisher. This publisher will publish an Image
-    # to the video_frames topic. The queue size is 10 messages.
-    self.publisher_ = self.create_publisher(Image, 'video_frames', 10)
-      
-    # We will publish a message every 0.1 seconds
-    timer_period = 0.1  # seconds
-      
-    # Create the timer
-    self.timer = self.create_timer(timer_period, self.timer_callback)
+    super().__init__('vision_assistant')
+
+    pkg_name = 'pm_vision'
+    vision_process_file_subpath = 'vision_processes/process_demo.xacro'
+
+    self.file_path= '/home/niklas/ros2_ws/src/pm_vision/vision_processes/process_demo.json'
+    #self.file_path2 = os.path.join(get_package_share_directory(pkg_name), vision_process_file_subpath)
+    #print(self.file_path2)
+    #self.publisher_ = self.create_publisher(Image, 'video_frames', 10)
+    # Create image subscriber
+    self.subscription = self.create_subscription(
+      Image, 
+      'video_frames', 
+      self.timer_callback, 
+      10)
+    self.subscription # prevent unused variable warning  
          
-    # Create a VideoCapture object
-    # The argument '0' gets the default webcam.
-    self.cap = cv2.VideoCapture(0)
-    self.img_width  = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    self.img_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    self.magnification = 3
-    self.pixelsize = 2    # in um
+    # Used to convert between ROS and OpenCV images
+    self.br = CvBridge()
+
+    # Camera parameter
+    self.magnification = 2
+    self.pixelsize = 1    # in um
     self.pixelPROum=self.magnification/self.pixelsize
     self.umPROpixel=self.pixelsize/self.magnification
+    
+
+  def process_image(self,data):
+    self.get_logger().info('Receiving video frame')
+    # Convert ROS Image message to OpenCV image
+    received_frame = self.br.imgmsg_to_cv2(data)
+    self.img_width  = received_frame.shape[1]
+    self.img_height = received_frame.shape[0]
     self.FOV_width=self.umPROpixel*self.img_width 
     self.FOV_height=self.umPROpixel*self.img_height
 
     print("FOV width is " + str(self.FOV_width) + "um")
-    print("FOV hight is " + str(self.FOV_height) + "um")
+    print("FOV hight is " + str(self.FOV_height) + "um")    
 
-    # Used to convert between ROS and OpenCV images
-    self.br = CvBridge()
-    
-
-  
-     
-  def timer_callback(self):
-    """
-    Callback function.
-    This function gets called every 0.1 seconds.
-    """
-    # Capture frame-by-frame
-    # This method returns True/False as well
-    # as the video frame.
-    ret, frame = self.cap.read()
-    frame_processed = frame
-    display_frame=frame_processed
+    frame_processed = received_frame
+    frame_visual_elements = np.zeros((received_frame.shape[0], received_frame.shape[1], 3), dtype = np.uint8)
+    display_frame=received_frame
     self.VisionOK = True
     try:
       f = open(self.file_path)
@@ -144,8 +142,7 @@ class ImagePublisher(Node):
                       cv2.fillPoly(frame_processed,pts=contours,color=(255,255,255))
                       display_frame=frame_processed
                     if draw_contours == 'True':
-                      display_frame = cv2.cvtColor(frame_processed,cv2.COLOR_GRAY2RGB)
-                      display_frame = cv2.drawContours(display_frame, contours, -1, (0,255,75), 2)
+                      cv2.drawContours(frame_visual_elements, contours, -1, (0,255,75), 2)
                     print("findContours executed")
             case "select_Area":
                 active = function_parameter['active']
@@ -167,13 +164,11 @@ class ImagePublisher(Node):
                     for index, area_item in enumerate(all_areas):
                         
                         if area_item<max_area and area_item>min_area:
-                          contour_frame = cv2.drawContours(contour_frame, contours, index, color=(255,255,255), thickness=cv2.FILLED)
+                          frame_processed = cv2.drawContours(contour_frame, contours, index, color=(255,255,255), thickness=cv2.FILLED)
                           self.VisionOK = True
                                       
                     if not self.VisionOK:
                       print("No matching Area")
-                    
-                    frame_processed = contour_frame
                     display_frame = frame_processed
                     print("select_Area executed")
             case "Morphology_Ex_Opening":
@@ -190,8 +185,20 @@ class ImagePublisher(Node):
                 grid_spacing = function_parameter['grid_spacing']
                 
                 if active == 'True':
-                    display_frame=cv2.line(display_frame, (int(display_frame.shape[1]/2), 0),(int(display_frame.shape[1]/2), display_frame.shape[1]), (255, 0, 0), 1, 1)
-                    display_frame=cv2.line(display_frame, (0,int(display_frame.shape[0]/2)),(int(display_frame.shape[1]), int(display_frame.shape[0]/2)), (255, 0, 0), 1, 1)
+                    numb_horizontal = int((self.FOV_height/2)/grid_spacing)+1
+                    numb_vertical = int((self.FOV_width/2)/grid_spacing)+1
+                    cv2.line(frame_visual_elements, (int(display_frame.shape[1]/2), 0),(int(display_frame.shape[1]/2), display_frame.shape[1]), (255, 0, 0), 1, 1)
+                    cv2.line(frame_visual_elements, (0,int(display_frame.shape[0]/2)),(int(display_frame.shape[1]), int(display_frame.shape[0]/2)), (255, 0, 0), 1, 1)
+                    #Draw horizontal lines
+                    for numb_h in range(numb_horizontal):
+                      pixel_delta=int(numb_h*grid_spacing*self.pixelPROum)
+                      cv2.line(frame_visual_elements, (0,int(display_frame.shape[0]/2)+pixel_delta),(int(display_frame.shape[1]), int(display_frame.shape[0]/2)+pixel_delta), (255, 0, 0), 1, 1)
+                      cv2.line(frame_visual_elements, (0,int(display_frame.shape[0]/2)-pixel_delta),(int(display_frame.shape[1]), int(display_frame.shape[0]/2)-pixel_delta), (255, 0, 0), 1, 1)
+                    # draw vertical lines
+                    for numb_v in range(numb_vertical):
+                      pixel_delta=int(numb_v*grid_spacing*self.pixelPROum)
+                      cv2.line(frame_visual_elements, (int(display_frame.shape[1]/2)+pixel_delta, 0),(int(display_frame.shape[1]/2)+pixel_delta, display_frame.shape[1]), (255, 0, 0), 1, 1)
+                      cv2.line(frame_visual_elements, (int(display_frame.shape[1]/2)-pixel_delta, 0),(int(display_frame.shape[1]/2)-pixel_delta, display_frame.shape[1]), (255, 0, 0), 1, 1)
                     print("Grid executed")
 
             case "HoughCircles":
@@ -224,11 +231,10 @@ class ImagePublisher(Node):
                           print(y_center_um)
                           print(radius_um)
                           # Conv to RGB to add Circles to display
-                          display_frame = cv2.cvtColor(frame_processed,cv2.COLOR_GRAY2RGB)
                           # Draw the circumference of the circle.
-                          cv2.circle(display_frame, (x, y), r, (0, 255, 0), 2)
+                          cv2.circle(frame_visual_elements, (x, y), r, (0, 255, 0), 2)
                           # Draw a small circle (of radius 1) to show the center.
-                          cv2.circle(display_frame, (x, y), 1, (0, 0, 255), 2)
+                          cv2.circle(frame_visual_elements, (x, y), 1, (0, 0, 255), 2)
                     else:
                       self.VisionOK=False
                     print("Hough Circles executed")
@@ -240,16 +246,35 @@ class ImagePublisher(Node):
     except:
         #print("Json Loading Error")
         print("Error in Vision Function")
-    #print(type(thresh))
+    
+    #Add visual elements to the display frame
+    display_frame = cv2.cvtColor(display_frame,cv2.COLOR_GRAY2BGR)
+    # Now create a mask of logo and create its inverse mask also
+    mask_frame = cv2.cvtColor(frame_visual_elements,cv2.COLOR_BGR2GRAY)
+    _, mask = cv2.threshold(mask_frame, 10, 255, cv2.THRESH_BINARY)
+    mask_inv = cv2.bitwise_not(mask)
+    # Now black-out the area of logo in ROI
+    img1_bg = cv2.bitwise_and(display_frame,display_frame,mask = mask_inv)
+    # Take only region of logo from logo image.
+    img2_fg = cv2.bitwise_and(frame_visual_elements,frame_visual_elements,mask = mask)
+    # Put logo in ROI and modify the main image
+    display_frame = cv2.add(img1_bg,img2_fg)
+    return display_frame
 
-    if ret == True:
-      # Publish the image.
-      # The 'cv2_to_imgmsg' method converts an OpenCV
-      # image to a ROS 2 image message
-      #self.publisher_.publish(self.br.cv2_to_imgmsg(frame_processed))
-      self.publisher_.publish(self.br.cv2_to_imgmsg(display_frame))
-    # Display the message on the console
-    self.get_logger().info('Publishing video frame')
+     
+  def timer_callback(self,data):
+    """
+    Callback function.
+    This function gets called every 0.1 seconds.
+    """
+    # Capture frame-by-frame
+    # This method returns True/False as well
+    # as the video frame.
+    # Process image from subsciption
+    current_frame = self.process_image(data)
+    # Show image
+    cv2.imshow("camera", current_frame)
+    cv2.waitKey(1)
   
 def main(args=None):
   
