@@ -38,7 +38,7 @@
                 "draw_contours": "True",
                 "mode": "RETR_EXTERNAL",
                 "method": "CHAIN_APPROX_SIMPLE",
-                "fill":"True"
+                "fill": "True"
             }
         },
         {
@@ -52,8 +52,8 @@
                 "active": "True",
                 "mode": "RETR_LIST",
                 "method": "CHAIN_APPROX_SIMPLE",
-                "max_area": 2000000,
-                "min_area": 20000
+                "max_area": 10000,
+                "min_area": 5000
             }
         },
         {
@@ -61,18 +61,37 @@
                 "active": "False"
             }
         },
-
+        {
+            "Canny": {
+                "active": "False",
+                "threshold1": 100,
+                "threshold2": 200,
+                "aperatureSize": 5,
+                "L2gradient": "nothing"
+            }
+        },
         {
             "HoughCircles": {
                 "active": "True",
                 "draw_circles": "True",
                 "method": "HOUGH_GRADIENT",
                 "dp": 1,
-                "minDist": 10,
-                "param1": 50,
-                "param2": 30,
-                "minRadius": 40,
-                "maxRadius": 5000
+                "minDist": 20,
+                "param1": 5,
+                "param2": 1,
+                "minRadius": 25,
+                "maxRadius": 40
+            }
+        },
+        {
+            "Errosion": {
+                "active": "False"
+            }
+        },
+        {
+            "Draw_Grid": {
+                "active": "True",
+                "grid_spacing": 10
             }
         }
     ]

@@ -14,6 +14,13 @@ import json
 from pm_vision.vision_utils import match_vision_function
 import numpy as np
 
+
+
+def Conv_Pixel_Top_Left_TO_Center(img_width, img_height, x, y):
+     x_center=int(x-img_width/2)
+     y_center=int(y-img_height/2)
+     return x_center, y_center
+
 class ImagePublisher(Node):
   """
   Create an ImagePublisher class, which is a subclass of the Node class.
@@ -54,6 +61,8 @@ class ImagePublisher(Node):
     self.br = CvBridge()
     
 
+  
+     
   def timer_callback(self):
     """
     Callback function.
@@ -153,8 +162,7 @@ class ImagePublisher(Node):
                     for cnt in contours:
                         area= cv2.contourArea(cnt)
                         all_areas.append(area)
-                       
-                    contour_frame = np.zeros((self.img_height, self.img_width, 1), dtype = np.uint8)
+                    contour_frame = np.zeros((frame_processed.shape[0], frame_processed.shape[1], 1), dtype = np.uint8)
                     self.VisionOK = False
                     for index, area_item in enumerate(all_areas):
                         
@@ -168,7 +176,6 @@ class ImagePublisher(Node):
                     frame_processed = contour_frame
                     display_frame = frame_processed
                     print("select_Area executed")
-
             case "Morphology_Ex_Opening":
                 active = function_parameter['active']
                 kernelsize = function_parameter['kernelsize']
@@ -178,6 +185,14 @@ class ImagePublisher(Node):
                     frame_processed = cv2.morphologyEx(frame_processed, cv2.MORPH_OPEN, kernel)
                     display_frame=frame_processed
                     print("Morphology_Ex_Opening executed")
+            case "Draw_Grid":
+                active = function_parameter['active']
+                grid_spacing = function_parameter['grid_spacing']
+                
+                if active == 'True':
+                    display_frame=cv2.line(display_frame, (int(display_frame.shape[1]/2), 0),(int(display_frame.shape[1]/2), display_frame.shape[1]), (255, 0, 0), 1, 1)
+                    display_frame=cv2.line(display_frame, (0,int(display_frame.shape[0]/2)),(int(display_frame.shape[1]), int(display_frame.shape[0]/2)), (255, 0, 0), 1, 1)
+                    print("Grid executed")
 
             case "HoughCircles":
                 active = function_parameter['active']
@@ -200,12 +215,20 @@ class ImagePublisher(Node):
                       detected_circles = np.uint16(np.around(detected_circles))
                       if draw_circles == 'True':
                         for pt in detected_circles[0, :]:
-                          a, b, r = pt[0], pt[1], pt[2]
+                          x, y, r = pt[0], pt[1], pt[2]                          
+                          x_center_pix, y_center_pix =Conv_Pixel_Top_Left_TO_Center(frame_processed.shape[1], frame_processed.shape[0],x,y)
+                          x_center_um=x_center_pix*self.umPROpixel
+                          y_center_um=y_center_pix*self.umPROpixel
+                          radius_um=r*self.umPROpixel
+                          print(x_center_um)
+                          print(y_center_um)
+                          print(radius_um)
+                          # Conv to RGB to add Circles to display
                           display_frame = cv2.cvtColor(frame_processed,cv2.COLOR_GRAY2RGB)
                           # Draw the circumference of the circle.
-                          cv2.circle(display_frame, (a, b), r, (0, 255, 0), 2)
+                          cv2.circle(display_frame, (x, y), r, (0, 255, 0), 2)
                           # Draw a small circle (of radius 1) to show the center.
-                          cv2.circle(display_frame, (a, b), 1, (0, 0, 255), 3)
+                          cv2.circle(display_frame, (x, y), 1, (0, 0, 255), 2)
                     else:
                       self.VisionOK=False
                     print("Hough Circles executed")
