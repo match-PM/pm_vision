@@ -57,10 +57,8 @@ class ImagePublisher(Node):
     self.umPROpixel=self.pixelsize/self.magnification
     
 
-  def process_image(self,data):
-    self.get_logger().info('Receiving video frame')
-    # Convert ROS Image message to OpenCV image
-    received_frame = self.br.imgmsg_to_cv2(data)
+  def process_image(self,received_frame):
+
     self.img_width  = received_frame.shape[1]
     self.img_height = received_frame.shape[0]
     self.FOV_width=self.umPROpixel*self.img_width 
@@ -267,13 +265,16 @@ class ImagePublisher(Node):
     Callback function.
     This function gets called every 0.1 seconds.
     """
+    self.get_logger().info('Receiving video frame')
+    # Convert ROS Image message to OpenCV image
+    received_frame = self.br.imgmsg_to_cv2(data)
     # Capture frame-by-frame
     # This method returns True/False as well
     # as the video frame.
     # Process image from subsciption
-    current_frame = self.process_image(data)
+    display_image = self.process_image(received_frame)
     # Show image
-    cv2.imshow("camera", current_frame)
+    cv2.imshow("camera", display_image)
     cv2.waitKey(1)
   
 def main(args=None):
