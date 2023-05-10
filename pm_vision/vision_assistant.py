@@ -1,9 +1,3 @@
-# Basic ROS 2 program to publish real-time streaming 
-# video from your built-in webcam
-# Author:
-# - Addison Sears-Collins
-# - https://automaticaddison.com
-  
 # Import the necessary libraries
 import rclpy # Python Client Library for ROS 2
 from rclpy.node import Node # Handles the creation of nodes
@@ -15,7 +9,32 @@ from ament_index_python.packages import get_package_share_directory
 from pm_vision.vision_utils import match_vision_function
 import numpy as np
 import os
+from os import listdir
+from datetime import datetime
+import yaml
+import fnmatch
+from yaml.loader import SafeLoader
+import subprocess
 
+def get_screen_resolution():
+   output = subprocess.Popen('xrandr | grep "\*" | cut -d " " -f4', shell=True, stdout=subprocess.PIPE).communicate()[0]
+   resolution = output.split()[0].split(b'x')
+   return {'width':resolution[0],'height':resolution[1]}
+
+def image_resize(image, width=None, height = None, inter = cv2.INTER_AREA):
+  dim = None
+  (h,w)=image.shape[:2]
+
+  if width is None and height is None:
+    return image
+  if width is None:
+    r=height/float (h)
+    dim = (int(w*r),height)
+  else:
+    r=width/float(w)
+    dim=(width,int(h*r)) 
+  resized = cv2.resize(image, dim ,interpolation=inter)
+  return resized
 
 def Conv_Pixel_Top_Left_TO_Center(img_width, img_height, x, y):
      x_center=int(x-img_width/2)
@@ -31,32 +50,113 @@ class ImagePublisher(Node):
     Class constructor to set up the node
     """
     super().__init__('vision_assistant')
+    self.declare_parameter('launch_mode', 'assistant')      # 'execute_process'
+    self.declare_parameter('process_filename','process_demo.json')
+    self.declare_parameter('camera_config_filename','webcam_config.yaml')
+    self.declare_parameter('db_cross_val_only', False)
 
-    pkg_name = 'pm_vision'
-    vision_process_file_subpath = 'vision_processes/process_demo.xacro'
+    self.vision_filename = self.get_parameter('process_filename').value
 
-    self.file_path= '/home/niklas/ros2_ws/src/pm_vision/vision_processes/process_demo.json'
-    #self.file_path2 = os.path.join(get_package_share_directory(pkg_name), vision_process_file_subpath)
-    #print(self.file_path2)
+    self.config_file_path= '/home/niklas/ros2_ws/src/pm_vision/config/vision_assistant_config.yaml'
+
     #self.publisher_ = self.create_publisher(Image, 'video_frames', 10)
     # Create image subscriber
-    self.subscription = self.create_subscription(
-      Image, 
-      'video_frames', 
-      self.timer_callback, 
-      10)
-    self.subscription # prevent unused variable warning  
-         
+    self.get_logger().info('Starting node in ' + self.get_parameter('launch_mode').value +"-mode")
+    self.get_logger().info('Current vision process: ' + self.get_parameter('process_filename').value)
+
+    timestamp = datetime.now()
+    self.screen_resolution=get_screen_resolution()
+    self.screen_height=int(self.screen_resolution["height"].decode('UTF-8'))
+    self.screen_width=int(self.screen_resolution["width"].decode('UTF-8'))
+    self.get_logger().info('Screen resolution: '+ str(self.screen_width)+'x'+str(self.screen_height))
+
+    self.process_start_time=timestamp.strftime("%d_%m_%Y_%H_%M_%S")
     # Used to convert between ROS and OpenCV images
     self.br = CvBridge()
+    self.counter_error_cross_val=0
+    self.VisionOK_cross_val=True
 
-    # Camera parameter
-    self.magnification = 2
-    self.pixelsize = 1    # in um
-    self.pixelPROum=self.magnification/self.pixelsize
-    self.umPROpixel=self.pixelsize/self.magnification
+    self.load_assistant_config()
+    self.process_file_path = self.process_library_path + self.vision_filename
+    self.load_process_file_metadata()
+    self.load_camera_config()
+
+    if self.get_parameter('db_cross_val_only').value:
+      self.cycle_though_db()
+    else:
+      self.subscription = self.create_subscription(
+        Image, 
+        'video_frames', 
+        self.Vision_callback, 
+        10)
+      self.subscription # prevent unused variable warning  
     
 
+  def load_assistant_config(self):
+    try:
+      f = open(self.config_file_path)
+      FileData = yaml.load(f,Loader=SafeLoader)
+      config=FileData["vision_assistant_config"]
+      self.cross_validation=config["cross_validation"]
+      self.show_image_on_error=config["show_image_on_error"]
+      self.step_though_images=config["step_though_images"]
+      self.process_library_path=config["process_library_path"]
+      self.vision_database_path=config["vision_database_path"]
+      self.image_display_time_in_execution_mode=config["image_display_time_in_execution_mode"]*1000
+      self.camera_config_path=config["camera_config_path"]
+      self.show_input_and_output_image=config["show_input_and_output_image"]
+
+      self.process_file_path = self.process_library_path + self.vision_filename
+      f.close()
+      self.get_logger().info('Vision assistant config loaded!')
+    except:
+      self.get_logger().error('Error opening vision assistant configuration: ' + str(self.config_file_path)+ "!")
+
+  def load_camera_config(self):
+    try:
+      f = open(self.camera_config_path+self.get_parameter('camera_config_filename').value)
+      FileData = yaml.load(f,Loader=SafeLoader)
+      config=FileData["camera_params"]
+      self.pixelsize=config["pixelsize"]
+      self.magnification=config["magnification"]
+      self.camera_axis_1=config["camera_axis_1"]
+      self.camera_axis_2=config["camera_axis_2"]
+      # Calculate Camera parameter
+      self.pixelPROum=self.magnification/self.pixelsize
+      self.umPROpixel=self.pixelsize/self.magnification
+      f.close()
+      self.get_logger().info('Camera config loaded!')
+    except:
+      self.get_logger().error('Error opening camera config file: ' + str(self.camera_config_path+self.get_parameter('camera_config_filename').value)+ "!")
+
+  def load_process_file_metadata(self):
+    try:
+      f = open(self.process_file_path)
+      FileData = json.load(f)
+      self.vision_process_name=FileData['vision_process_name']
+      self.vision_process_id=FileData['id_process']
+      self.process_db_path=self.vision_database_path+self.vision_process_name
+      f.close()
+      self.get_logger().info('Process meta data loaded!')
+    except:
+      self.get_logger().error('Error opening process file: ' + str(self.process_file_path)+ "!")
+
+  def create_vision_element_overlay(self,displ_frame,vis_elem_frame):
+    #Add visual elements to the display frame
+    if len(displ_frame.shape)<3:
+      displ_frame = cv2.cvtColor(displ_frame,cv2.COLOR_GRAY2BGR)
+    # Now create a mask of logo and create its inverse mask also
+    mask_frame = cv2.cvtColor(vis_elem_frame,cv2.COLOR_BGR2GRAY)
+    _, mask = cv2.threshold(mask_frame, 10, 255, cv2.THRESH_BINARY)
+    mask_inv = cv2.bitwise_not(mask)
+    # Now black-out the area of logo in ROI
+    img1_bg = cv2.bitwise_and(displ_frame,displ_frame,mask = mask_inv)
+    # Take only region of logo from logo image.
+    img2_fg = cv2.bitwise_and(vis_elem_frame,vis_elem_frame,mask = mask)
+    # Put logo in ROI and modify the main image
+    displ_frame = cv2.add(img1_bg,img2_fg)
+    return displ_frame
+  
   def process_image(self,received_frame):
 
     self.img_width  = received_frame.shape[1]
@@ -66,13 +166,14 @@ class ImagePublisher(Node):
 
     print("FOV width is " + str(self.FOV_width) + "um")
     print("FOV hight is " + str(self.FOV_height) + "um")    
-
+    frame_buffer=[]
     frame_processed = received_frame
     frame_visual_elements = np.zeros((received_frame.shape[0], received_frame.shape[1], 3), dtype = np.uint8)
     display_frame=received_frame
+    frame_buffer.append(received_frame)
     self.VisionOK = True
     try:
-      f = open(self.file_path)
+      f = open(self.process_file_path)
       FileData = json.load(f)
       pipeline_list=FileData['vision_pipeline']
       for list_item in pipeline_list:
@@ -89,6 +190,7 @@ class ImagePublisher(Node):
                     _,frame_processed = cv2.threshold(frame_processed,thresh,maxval,exec(_Command))
                     print("Theshold executed")
                     display_frame=frame_processed
+                    frame_buffer.append(frame_processed)
             case "adaptiveThreshold":
                 active = function_parameter['active']
                 maxValue = function_parameter['maxValue']
@@ -102,18 +204,27 @@ class ImagePublisher(Node):
                     frame_processed = cv2.adaptiveThreshold(frame_processed,maxValue,exec(_Command_adaptiveMethod),exec(_Command_thresholdType),blockSize,C_Value)
                     print("Adaptive Theshold executed")
                     display_frame=frame_processed
+                    frame_buffer.append(frame_processed)
             case "bitwise_not":
                 active = function_parameter['active']
                 if active == 'True':
                     frame_processed = cv2.bitwise_not(frame_processed)
                     print("bitwise_not executed")
                     display_frame=frame_processed
+                    frame_buffer.append(frame_processed)
+
             case "BGR2GRAY":
                 active = function_parameter['active']
                 if active == 'True':
+                  if len(frame_processed.shape)==3:
                     frame_processed = cv2.cvtColor(frame_processed, cv2.COLOR_BGR2GRAY)
-                    print("BGR2GRAY executed")
                     display_frame=frame_processed
+                    frame_buffer.append(frame_processed)
+                    print("BGR2GRAY executed")
+                  else:
+                    print("BGR2GRAY ignored! Image is already Grayscale!")
+                       
+
             case "Canny":
                 active = function_parameter['active']
                 threshold1 = function_parameter['threshold1']
@@ -121,9 +232,11 @@ class ImagePublisher(Node):
                 aperatureSize = function_parameter['aperatureSize']
                 L2gradient = function_parameter['L2gradient'] 
                 if active == 'True':
-                    frame_processed = edges = cv2.Canny(frame_processed,threshold1,threshold2,aperatureSize)
+                    frame_processed = cv2.Canny(frame_processed,threshold1,threshold2,aperatureSize)
                     print("Canny executed")
                     display_frame=frame_processed
+                    frame_buffer.append(frame_processed)
+
             case "findContours":
                 active = function_parameter['active']
                 draw_contours = function_parameter['draw_contours']
@@ -139,9 +252,11 @@ class ImagePublisher(Node):
                     if fill =="True":
                       cv2.fillPoly(frame_processed,pts=contours,color=(255,255,255))
                       display_frame=frame_processed
+                      frame_buffer.append(frame_processed)
                     if draw_contours == 'True':
                       cv2.drawContours(frame_visual_elements, contours, -1, (0,255,75), 2)
                     print("findContours executed")
+
             case "select_Area":
                 active = function_parameter['active']
                 mode = function_parameter['mode']
@@ -157,7 +272,7 @@ class ImagePublisher(Node):
                     for cnt in contours:
                         area= cv2.contourArea(cnt)
                         all_areas.append(area)
-                    contour_frame = np.zeros((frame_processed.shape[0], frame_processed.shape[1], 1), dtype = np.uint8)
+                    contour_frame = np.zeros((frame_processed.shape[0], frame_processed.shape[1]), dtype = np.uint8)
                     self.VisionOK = False
                     for index, area_item in enumerate(all_areas):
                         
@@ -166,9 +281,13 @@ class ImagePublisher(Node):
                           self.VisionOK = True
                                       
                     if not self.VisionOK:
+                      self.VisionOK = False
+                      self.counter_error_cross_val += 1
                       print("No matching Area")
                     display_frame = frame_processed
+                    frame_buffer.append(frame_processed)
                     print("select_Area executed")
+
             case "Morphology_Ex_Opening":
                 active = function_parameter['active']
                 kernelsize = function_parameter['kernelsize']
@@ -177,7 +296,25 @@ class ImagePublisher(Node):
                     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kernelsize, kernelsize))
                     frame_processed = cv2.morphologyEx(frame_processed, cv2.MORPH_OPEN, kernel)
                     display_frame=frame_processed
+                    frame_buffer.append(frame_processed)
                     print("Morphology_Ex_Opening executed")
+
+            case "save_image":
+                active = function_parameter['active']
+                prefix = function_parameter['prefix']
+                with_vision_elements = function_parameter['with_vision_elements']
+                if active == 'True':
+                    
+                    if not os.path.exists(self.process_db_path):
+                      os.makedirs(self.process_db_path)
+                      print("Process DB folder created!")
+                    
+                    image_name=self.process_db_path+"/"+self.vision_process_id+"_"+self.process_start_time+prefix+".png"
+                    if not os.path.isfile(image_name):
+                      cv2.imwrite(image_name,frame_processed)
+                      print("Image saved!")
+                    print("save_image executed")
+                    
             case "Draw_Grid":
                 active = function_parameter['active']
                 grid_spacing = function_parameter['grid_spacing']
@@ -185,6 +322,7 @@ class ImagePublisher(Node):
                 if active == 'True':
                     numb_horizontal = int((self.FOV_height/2)/grid_spacing)+1
                     numb_vertical = int((self.FOV_width/2)/grid_spacing)+1
+                    cv2.putText(img=frame_visual_elements,text="Grid: "+ str(grid_spacing) + "um", org=(5,30), fontFace=cv2.FONT_HERSHEY_SIMPLEX,fontScale=1,color=(255,0,0), thickness=1)
                     cv2.line(frame_visual_elements, (int(display_frame.shape[1]/2), 0),(int(display_frame.shape[1]/2), display_frame.shape[1]), (255, 0, 0), 1, 1)
                     cv2.line(frame_visual_elements, (0,int(display_frame.shape[0]/2)),(int(display_frame.shape[1]), int(display_frame.shape[0]/2)), (255, 0, 0), 1, 1)
                     #Draw horizontal lines
@@ -225,9 +363,9 @@ class ImagePublisher(Node):
                           x_center_um=x_center_pix*self.umPROpixel
                           y_center_um=y_center_pix*self.umPROpixel
                           radius_um=r*self.umPROpixel
-                          print(x_center_um)
-                          print(y_center_um)
-                          print(radius_um)
+                          print('X-Coordinate: '+ str(x_center_um))
+                          print('X-Coordinate: '+ str(y_center_um))
+                          print('Radius: '+ str(radius_um))
                           # Conv to RGB to add Circles to display
                           # Draw the circumference of the circle.
                           cv2.circle(frame_visual_elements, (x, y), r, (0, 255, 0), 2)
@@ -235,48 +373,107 @@ class ImagePublisher(Node):
                           cv2.circle(frame_visual_elements, (x, y), 1, (0, 0, 255), 2)
                     else:
                       self.VisionOK=False
+                      self.counter_error_cross_val += 1
                     print("Hough Circles executed")
                   except:
                     print("Circle detection failed! Image may not be grayscale!")
-
+      if self.VisionOK:
+        print("Vision executed cleanly!")
+        #print(len(frame_buffer))
+      else:
+        print("Vision execuded with Error!")
       # Closing file
       f.close()
     except:
         #print("Json Loading Error")
-        print("Error in Vision Function")
+        self.get_logger().error("Vision Pipline executed with Error!")
     
-    #Add visual elements to the display frame
-    display_frame = cv2.cvtColor(display_frame,cv2.COLOR_GRAY2BGR)
-    # Now create a mask of logo and create its inverse mask also
-    mask_frame = cv2.cvtColor(frame_visual_elements,cv2.COLOR_BGR2GRAY)
-    _, mask = cv2.threshold(mask_frame, 10, 255, cv2.THRESH_BINARY)
-    mask_inv = cv2.bitwise_not(mask)
-    # Now black-out the area of logo in ROI
-    img1_bg = cv2.bitwise_and(display_frame,display_frame,mask = mask_inv)
-    # Take only region of logo from logo image.
-    img2_fg = cv2.bitwise_and(frame_visual_elements,frame_visual_elements,mask = mask)
-    # Put logo in ROI and modify the main image
-    display_frame = cv2.add(img1_bg,img2_fg)
-    return display_frame
+    if not self.VisionOK:
+      cv2.rectangle(frame_visual_elements,(0,0),(frame_visual_elements.shape[1],frame_visual_elements.shape[0]),(0,0,255),3)
+    else:
+      cv2.rectangle(frame_visual_elements,(0,0),(frame_visual_elements.shape[1],frame_visual_elements.shape[0]),(0,255,0),3)
+    
+    display_frame=self.create_vision_element_overlay(display_frame,frame_visual_elements)
 
-     
-  def timer_callback(self,data):
-    """
-    Callback function.
-    This function gets called every 0.1 seconds.
-    """
+    if len(received_frame.shape)<3:
+      received_frame = cv2.cvtColor(received_frame,cv2.COLOR_GRAY2BGR)
+
+    if  self.show_input_and_output_image:
+      display_frame = cv2.vconcat([received_frame,display_frame])
+
+    display_frame=image_resize(display_frame, height = (self.screen_height-100))
+
+    return display_frame
+  
+  def cycle_though_db(self):
+    try:
+      while(True):
+        k=cv2.waitKey(1) & 0xFF
+        self.run_crossvalidation()
+    except KeyboardInterrupt:
+      pass
+    
+  def run_crossvalidation(self):
+    # Starting cross validation with images in folder
+    if self.cross_validation:
+      self.counter_error_cross_val=0
+      self.VisionOK_cross_val=True
+      print("----------------------------")
+      print("Starting Cross Validation...")
+      # Get number of images to be processed
+      numb_images_cross_val=len(fnmatch.filter(os.listdir(self.process_db_path),'*.png'))
+      print(str(numb_images_cross_val)+" images for crossvalidation")
+      for image_in_folder in os.listdir(self.process_db_path):
+        if (image_in_folder.endswith(".png")):
+          image=cv2.imread(self.process_db_path+"/"+image_in_folder)
+          print("----------------------------")
+          print("Processing image: " + image_in_folder)
+          # Calculate VisionOK on image
+          display_image = self.process_image(image)
+
+          if not self.VisionOK:
+            self.VisionOK_cross_val=False
+
+          #if image_in_folder=="001_08_05_2023_20_09_28_3.png":
+          #   self.VisionOK=False
+          if (self.get_parameter('launch_mode').value) == 'assistant':
+            if (not self.VisionOK and self.show_image_on_error) or self.step_though_images: 
+              while(True):
+                display_image = self.process_image(image)
+                cv2.imshow("PM Vision Assistant", display_image)
+                k = cv2.waitKey(1)& 0xFF
+                if k == ord('q'):
+                  break
+      if self.counter_error_cross_val==0:
+        self.get_logger().info("Crossvalidation exited with no Error!")
+
+      else:
+        print("Crossvalidation error!")
+        self.get_logger().warning('Crossvalidation had errors! ' + str(self.counter_error_cross_val)+"/"+str(numb_images_cross_val)+" images had errors!")
+  
+  def Vision_callback(self,data):
+
+    self.load_assistant_config()
     self.get_logger().info('Receiving video frame')
     # Convert ROS Image message to OpenCV image
     received_frame = self.br.imgmsg_to_cv2(data)
-    # Capture frame-by-frame
-    # This method returns True/False as well
-    # as the video frame.
-    # Process image from subsciption
+
     display_image = self.process_image(received_frame)
     # Show image
-    cv2.imshow("camera", display_image)
-    cv2.waitKey(1)
-  
+    cv2.imshow("PM Vision Assistant", display_image)
+    
+    if (self.get_parameter('launch_mode').value) == 'assistant':
+      cv2.waitKey(1)
+    else:
+      cv2.waitKey(self.image_display_time_in_execution_mode)
+      cv2.destroyAllWindows()
+
+    self.run_crossvalidation()
+       
+    if (self.get_parameter('launch_mode').value) is not 'assistant':
+      self.get_logger().info('Vision Process Ended!')
+      self.destroy_node()
+
 def main(args=None):
   
   # Initialize the rclpy library

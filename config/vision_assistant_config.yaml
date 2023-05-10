@@ -1,0 +1,9 @@
+vision_assistant_config:
+  cross_validation: False    #test
+  show_image_on_error: True
+  step_though_images: False
+  process_library_path: "/home/niklas/ros2_ws/src/pm_vision/vision_processes/"
+  vision_database_path: "/home/niklas/ros2_ws/src/pm_vision/vision_db/"
+  camera_config_path: "/home/niklas/ros2_ws/src/pm_vision/config/"
+  image_display_time_in_execution_mode: 5
+  show_input_and_output_image: True

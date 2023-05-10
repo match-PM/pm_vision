@@ -1,0 +1,5 @@
+camera_params:
+  pixelsize: 1 # in um
+  magnification: 1 
+  camera_axis_1: 'x'
+  camera_axis_2: 'y'

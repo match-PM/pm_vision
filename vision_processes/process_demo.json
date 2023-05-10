@@ -1,21 +1,31 @@
 {
+    "vision_process_name":"process_demo",
+    "id_process":"001",
     "vision_pipeline": [
         {
             "Draw_Grid": {
                 "active": "True",
-                "grid_spacing": 200
+                "grid_spacing": 180
             }
         },
+
         {
             "BGR2GRAY": {
                 "active": "True"
             }
         },
         {
+            "save_image": {
+                "active": "False",
+                "prefix":"_5",
+                "with_vision_elements":"False"
+            }
+        },
+        {
             "threshold": {
                 "active": "True",
-                "thresh": 160,
-                "maxval": 200,
+                "thresh": 210,
+                "maxval": 255,
                 "type": "THRESH_BINARY"
             }
         },
@@ -41,7 +51,7 @@
         {
             "findContours": {
                 "active": "False",
-                "draw_contours": "True",
+                "draw_contours": "False",
                 "mode": "RETR_EXTERNAL",
                 "method": "CHAIN_APPROX_SIMPLE",
                 "fill": "True"
@@ -50,16 +60,16 @@
         {
             "Morphology_Ex_Opening": {
                 "active": "True",
-                "kernelsize": 9
+                "kernelsize": 11
             }
         },
         {
             "select_Area": {
-                "active": "True",
+                "active": "False",
                 "mode": "RETR_LIST",
                 "method": "CHAIN_APPROX_SIMPLE",
-                "max_area": 100000,
-                "min_area": 5000
+                "max_area": 1200,
+                "min_area": 10
             }
         },
         {
@@ -78,15 +88,15 @@
         },
         {
             "HoughCircles": {
-                "active": "False",
+                "active": "True",
                 "draw_circles": "True",
                 "method": "HOUGH_GRADIENT",
-                "dp": 8,
+                "dp": 100,
                 "minDist": 30,
                 "param1": 5,
                 "param2": 1,
-                "minRadius": 30,
-                "maxRadius": 40
+                "minRadius": 10,
+                "maxRadius": 80
             }
         },
         {
