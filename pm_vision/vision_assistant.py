@@ -15,6 +15,8 @@ import yaml
 import fnmatch
 from yaml.loader import SafeLoader
 import subprocess
+from ament_index_python.packages import get_package_share_directory
+
 
 def get_screen_resolution():
    output = subprocess.Popen('xrandr | grep "\*" | cut -d " " -f4', shell=True, stdout=subprocess.PIPE).communicate()[0]
@@ -54,10 +56,16 @@ class ImagePublisher(Node):
     self.declare_parameter('process_filename','process_demo.json')
     self.declare_parameter('camera_config_filename','webcam_config.yaml')
     self.declare_parameter('db_cross_val_only', False)
-
+    
     self.vision_filename = self.get_parameter('process_filename').value
+    #ament_index_python.get_resource('package', 'rclcpp')
 
-    self.config_file_path= '/home/niklas/ros2_ws/src/pm_vision/config/vision_assistant_config.yaml'
+    # may raise PackageNotFoundError
+    package_share_directory = get_package_share_directory('pm_vision')
+    print(package_share_directory)
+    self.config_file_path = get_package_share_directory('pm_vision') + '/vision_assistant_config.yaml'
+
+    #self.config_file_path= '/home/niklas/ros2_ws/src/pm_vision/config/vision_assistant_config.yaml'
 
     #self.publisher_ = self.create_publisher(Image, 'video_frames', 10)
     # Create image subscriber
@@ -489,9 +497,6 @@ def main(args=None):
   # Spin the node so the callback function is called.
   rclpy.spin(image_publisher)
   
-  # Destroy the node explicitly
-  # (optional - otherwise it will be done automatically
-  # when the garbage collector destroys the node object)
   image_publisher.destroy_node()
   
   # Shutdown the ROS client library for Python

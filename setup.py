@@ -3,13 +3,18 @@ from setuptools import setup
 package_name = 'pm_vision'
 
 setup(
+    #author='Niklas Terei',
+    #author_email='terei@match.uni-hannover.de',
+    #maintainer='Niklas Terei',
+    #maintainer_email='terei@match.uni-hannover.de',
     name=package_name,
-    version='0.0.0',
+    version='0.1.0',
     packages=[package_name],
     data_files=[
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
+        ('share/' + package_name, ['config/vision_assistant_config.yaml']),
     ],
     install_requires=['setuptools'],
     zip_safe=True,

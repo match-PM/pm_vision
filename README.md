@@ -4,7 +4,11 @@ ROS2 Vision-Assistant to intuitivly build reusable vision-pipelines based on ope
 The pm vision assistant is designed to intuitivly build reusable vision-pipelines based on openCV functions. It's basic idea is that the vision assistant node runs different vision functions (mostly based on openCV) successively to extract a specific feature from an image. Running the node in assistant mode will show you the processed (and the original) image you subscribed to while you can modify the vision pipeline in the processfile.json. It also has an feature  to crossvalidate images from a data base with the loaded vision_process.json. 
 
 There are some important config files to operate the vision assistant:
-* `vision_assistant_config.yaml`: This config file configues how the vision assistant will operate (parameters can be changed while the node is runing).
+* `vision_assistant_config.yaml`: This config file configues how the vision assistant will operate (parameters can be changed while the node is runing). The config file will be installed in:
+```
+/home/USER/ros2_ws/install/pm_vision/share
+```
+In order to change the behavoir of the assistant during runtime that file can be changed.
 * `camera_config.yaml`: This file specifies the parameters for the connected camera (e.a. webcam). Some of the input and (all) output parameter of the vision functions are specified in microns (calculated by the definitions in camera_config). 
 
 Currently the assistant is designed for camera setups with telecentric lenses only! It is currently intended to be used in precision assembly tasks for fast vision pipeline deployment.
@@ -33,7 +37,11 @@ vision_database_path
 ```
 camera_config_path
 ```
-The pathes you insert in the config.yaml specify where the vision assitants looks for processes and camera_configs and where to save images. You can specify any path here. 
+The pathes you insert in the config.yaml specify where the vision assitants looks for processes and camera_configs and where to save images. You can specify any path here.
+* Build your workspace:
+```
+colcon build 
+```
 
 ## 3. Getting Started
 If you leave (modify accordingly) the default file pathes in the vision_assistant_config.yaml, the vision assistant will launch with the process_demo.json. Images will be saved in vision_db/process_demo. By default it will load the camera parameter from config/webcam_config.yaml. By default it will subscribe to the topic 'video_frames'.
