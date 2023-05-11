@@ -50,7 +50,7 @@ class ImagePublisher(Node):
     Class constructor to set up the node
     """
     super().__init__('vision_assistant')
-    self.declare_parameter('launch_mode', 'assistant')      # 'execute_process'
+    self.declare_parameter('launch_as_assistant', True)      # 'execute_process'
     self.declare_parameter('process_filename','process_demo.json')
     self.declare_parameter('camera_config_filename','webcam_config.yaml')
     self.declare_parameter('db_cross_val_only', False)
@@ -61,7 +61,11 @@ class ImagePublisher(Node):
 
     #self.publisher_ = self.create_publisher(Image, 'video_frames', 10)
     # Create image subscriber
-    self.get_logger().info('Starting node in ' + self.get_parameter('launch_mode').value +"-mode")
+    if self.get_parameter('launch_as_assistant').value:
+      self.get_logger().info('Starting node in assistant mode!')
+    else:
+      self.get_logger().info('Starting node in processing mode!')
+
     self.get_logger().info('Current vision process: ' + self.get_parameter('process_filename').value)
 
     timestamp = datetime.now()
@@ -436,7 +440,7 @@ class ImagePublisher(Node):
 
           #if image_in_folder=="001_08_05_2023_20_09_28_3.png":
           #   self.VisionOK=False
-          if (self.get_parameter('launch_mode').value) == 'assistant':
+          if (self.get_parameter('launch_as_assistant').value):
             if (not self.VisionOK and self.show_image_on_error) or self.step_though_images: 
               while(True):
                 display_image = self.process_image(image)
@@ -462,7 +466,7 @@ class ImagePublisher(Node):
     # Show image
     cv2.imshow("PM Vision Assistant", display_image)
     
-    if (self.get_parameter('launch_mode').value) == 'assistant':
+    if (self.get_parameter('launch_as_assistant').value):
       cv2.waitKey(1)
     else:
       cv2.waitKey(self.image_display_time_in_execution_mode)
@@ -470,7 +474,7 @@ class ImagePublisher(Node):
 
     self.run_crossvalidation()
        
-    if (self.get_parameter('launch_mode').value) is not 'assistant':
+    if not (self.get_parameter('launch_as_assistant').value):
       self.get_logger().info('Vision Process Ended!')
       self.destroy_node()
 
