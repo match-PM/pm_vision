@@ -63,7 +63,8 @@ class ImagePublisher(Node):
     # may raise PackageNotFoundError
     package_share_directory = get_package_share_directory('pm_vision')
     print(package_share_directory)
-    self.config_file_path = get_package_share_directory('pm_vision') + '/vision_assistant_config.yaml'
+    #äself.config_file_path = get_package_share_directory('pm_vision') + '/vision_assistant_path_config.yaml'
+    self.path_config_path = get_package_share_directory('pm_vision') + '/vision_assistant_path_config.yaml'
 
     #self.config_file_path= '/home/niklas/ros2_ws/src/pm_vision/config/vision_assistant_config.yaml'
 
@@ -87,9 +88,8 @@ class ImagePublisher(Node):
     self.br = CvBridge()
     self.counter_error_cross_val=0
     self.VisionOK_cross_val=True
-
+    self.load_path_config()
     self.load_assistant_config()
-    self.process_file_path = self.process_library_path + self.vision_filename
     self.load_process_file_metadata()
     self.load_camera_config()
 
@@ -103,26 +103,36 @@ class ImagePublisher(Node):
         10)
       self.subscription # prevent unused variable warning  
     
+  def load_path_config(self):
+      try:
+        f = open(self.path_config_path)
+        FileData = yaml.load(f,Loader=SafeLoader)
+        config=FileData["vision_assistant_path_config"]
+        self.process_library_path=config["process_library_path"]
+        self.vision_database_path=config["vision_database_path"]
+        self.camera_config_path=config["camera_config_path"]
+        self.vision_assistant_config=config["vision_assistant_config"]
+        self.process_file_path = self.process_library_path + self.vision_filename
+        f.close()
+        self.get_logger().info('Vision assistant path config loaded!')
+      except:
+        self.get_logger().error('Error opening vision assistant path configuration: ' + str(self.path_config_path)+ "!")
 
   def load_assistant_config(self):
     try:
-      f = open(self.config_file_path)
+      f = open(self.vision_assistant_config)
       FileData = yaml.load(f,Loader=SafeLoader)
       config=FileData["vision_assistant_config"]
       self.cross_validation=config["cross_validation"]
       self.show_image_on_error=config["show_image_on_error"]
       self.step_though_images=config["step_though_images"]
-      self.process_library_path=config["process_library_path"]
-      self.vision_database_path=config["vision_database_path"]
       self.image_display_time_in_execution_mode=config["image_display_time_in_execution_mode"]*1000
-      self.camera_config_path=config["camera_config_path"]
       self.show_input_and_output_image=config["show_input_and_output_image"]
-
-      self.process_file_path = self.process_library_path + self.vision_filename
+      self.scale_ouput_window_to_screen_size=config["scale_ouput_window_to_screen_size"]      
       f.close()
       self.get_logger().info('Vision assistant config loaded!')
     except:
-      self.get_logger().error('Error opening vision assistant configuration: ' + str(self.config_file_path)+ "!")
+      self.get_logger().error('Error opening vision assistant configuration: ' + str(self.vision_assistant_config)+ "!")
 
   def load_camera_config(self):
     try:
@@ -152,6 +162,16 @@ class ImagePublisher(Node):
       self.get_logger().info('Process meta data loaded!')
     except:
       self.get_logger().error('Error opening process file: ' + str(self.process_file_path)+ "!")
+  
+  def load_process_file(self):
+    try:
+      f = open(self.process_file_path)
+      FileData = json.load(f)
+      self.process_pipeline_list=FileData['vision_pipeline']
+      f.close()
+      self.get_logger().info('Process pipeline loaded!')
+    except:
+      self.get_logger().error('Error opening process file: ' + str(self.process_file_path)+ "!")
 
   def create_vision_element_overlay(self,displ_frame,vis_elem_frame):
     #Add visual elements to the display frame
@@ -169,7 +189,7 @@ class ImagePublisher(Node):
     displ_frame = cv2.add(img1_bg,img2_fg)
     return displ_frame
   
-  def process_image(self,received_frame):
+  def process_image(self,received_frame,_process_pipeline_list):
 
     self.img_width  = received_frame.shape[1]
     self.img_height = received_frame.shape[0]
@@ -185,9 +205,7 @@ class ImagePublisher(Node):
     frame_buffer.append(received_frame)
     self.VisionOK = True
     try:
-      f = open(self.process_file_path)
-      FileData = json.load(f)
-      pipeline_list=FileData['vision_pipeline']
+      pipeline_list=_process_pipeline_list
       for list_item in pipeline_list:
       # Iterating through the json
         for key, function_parameter in list_item.items():
@@ -388,17 +406,17 @@ class ImagePublisher(Node):
                       self.counter_error_cross_val += 1
                     print("Hough Circles executed")
                   except:
-                    print("Circle detection failed! Image may not be grayscale!")
+                    self.VisionOK=False
+                    self.get_logger().error('Circle detection failed! Image may not be grayscale!')
+
       if self.VisionOK:
-        print("Vision executed cleanly!")
+        self.get_logger().info('Vision process executed cleanly!')
         #print(len(frame_buffer))
       else:
-        print("Vision execuded with Error!")
-      # Closing file
-      f.close()
+        self.get_logger().error('Vision process executed with error!')
     except:
         #print("Json Loading Error")
-        self.get_logger().error("Vision Pipline executed with Error!")
+        self.get_logger().error("Fatal Error in vision function! Contact maintainer!")
     
     if not self.VisionOK:
       cv2.rectangle(frame_visual_elements,(0,0),(frame_visual_elements.shape[1],frame_visual_elements.shape[0]),(0,0,255),3)
@@ -441,7 +459,8 @@ class ImagePublisher(Node):
           print("----------------------------")
           print("Processing image: " + image_in_folder)
           # Calculate VisionOK on image
-          display_image = self.process_image(image)
+          self.load_process_file()
+          display_image = self.process_image(image,self.process_pipeline_list)
 
           if not self.VisionOK:
             self.VisionOK_cross_val=False
@@ -451,7 +470,8 @@ class ImagePublisher(Node):
           if (self.get_parameter('launch_as_assistant').value):
             if (not self.VisionOK and self.show_image_on_error) or self.step_though_images: 
               while(True):
-                display_image = self.process_image(image)
+                self.load_process_file()
+                display_image = self.process_image(image,self.process_pipeline_list)
                 cv2.imshow("PM Vision Assistant", display_image)
                 k = cv2.waitKey(1)& 0xFF
                 if k == ord('q'):
@@ -466,11 +486,13 @@ class ImagePublisher(Node):
   def Vision_callback(self,data):
 
     self.load_assistant_config()
+    self.load_process_file()
+
     self.get_logger().info('Receiving video frame')
     # Convert ROS Image message to OpenCV image
     received_frame = self.br.imgmsg_to_cv2(data)
-
-    display_image = self.process_image(received_frame)
+    
+    display_image = self.process_image(received_frame,self.process_pipeline_list)
     # Show image
     cv2.imshow("PM Vision Assistant", display_image)
     
