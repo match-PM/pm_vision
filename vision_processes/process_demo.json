@@ -1,37 +1,42 @@
 {
-    "vision_process_name":"process_demo",
-    "id_process":"001",
+    "vision_process_name": "process_demo",
+    "id_process": "001",
     "vision_pipeline": [
         {
             "Draw_Grid": {
-                "active": "True",
-                "grid_spacing": 180
+                "active": true,
+                "grid_spacing": 100
             }
         },
-
+        {
+            "Draw_CS": {
+                "active": true
+            }
+        },
         {
             "BGR2GRAY": {
-                "active": "True"
+                "active": true
             }
         },
         {
             "save_image": {
-                "active": "False",
-                "prefix":"_5",
-                "with_vision_elements":"False"
+                "active": false,
+                "prefix": "_7",
+                "with_vision_elements": false,
+                "save_in_cross_val": false
             }
         },
         {
             "threshold": {
-                "active": "True",
-                "thresh": 210,
+                "active": true,
+                "thresh": 150,
                 "maxval": 255,
                 "type": "THRESH_BINARY"
             }
         },
         {
             "adaptiveThreshold": {
-                "active": "False",
+                "active": false,
                 "maxValue": 100,
                 "adaptiveMethod": "ADAPTIVE_THRESH_GAUSSIAN_C",
                 "thresholdType": "THRESH_BINARY",
@@ -41,7 +46,7 @@
         },
         {
             "Canny": {
-                "active": "False",
+                "active": false,
                 "threshold1": 100,
                 "threshold2": 200,
                 "aperatureSize": 5,
@@ -49,23 +54,32 @@
             }
         },
         {
+            "ROI": {
+                "active": false,
+                "ROI_center_x": 0,
+                "ROI_center_y": 200,
+                "ROI_height": 360,
+                "ROI_width": 400
+            }
+        },
+        {
             "findContours": {
-                "active": "False",
-                "draw_contours": "False",
+                "active": false,
+                "draw_contours": false,
                 "mode": "RETR_EXTERNAL",
                 "method": "CHAIN_APPROX_SIMPLE",
-                "fill": "True"
+                "fill": true
             }
         },
         {
             "Morphology_Ex_Opening": {
-                "active": "True",
+                "active": false,
                 "kernelsize": 11
             }
         },
         {
             "select_Area": {
-                "active": "False",
+                "active": false,
                 "mode": "RETR_LIST",
                 "method": "CHAIN_APPROX_SIMPLE",
                 "max_area": 1200,
@@ -74,12 +88,12 @@
         },
         {
             "bitwise_not": {
-                "active": "False"
+                "active": false
             }
         },
         {
             "Canny": {
-                "active": "False",
+                "active": false,
                 "threshold1": 100,
                 "threshold2": 200,
                 "aperatureSize": 5,
@@ -88,22 +102,21 @@
         },
         {
             "HoughCircles": {
-                "active": "True",
-                "draw_circles": "True",
+                "active": true,
+                "draw_circles": true,
                 "method": "HOUGH_GRADIENT",
-                "dp": 100,
+                "dp": 500,
                 "minDist": 30,
                 "param1": 5,
                 "param2": 1,
-                "minRadius": 10,
-                "maxRadius": 80
+                "minRadius": 40,
+                "maxRadius": 200
             }
         },
         {
             "Errosion": {
-                "active": "False"
+                "active": false
             }
         }
-
     ]
 }

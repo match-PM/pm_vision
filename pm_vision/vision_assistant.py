@@ -16,12 +16,19 @@ import fnmatch
 from yaml.loader import SafeLoader
 import subprocess
 from ament_index_python.packages import get_package_share_directory
-
+import math
+from math import pi
 
 def get_screen_resolution():
    output = subprocess.Popen('xrandr | grep "\*" | cut -d " " -f4', shell=True, stdout=subprocess.PIPE).communicate()[0]
    resolution = output.split()[0].split(b'x')
    return {'width':resolution[0],'height':resolution[1]}
+
+def degrees_to_rads(deg):
+  return (deg * pi) / 180.0
+
+def rads_to_degrees(rad):
+  return (180.0*rad)/pi
 
 def image_resize(image, width=None, height = None, inter = cv2.INTER_AREA):
   dim = None
@@ -38,10 +45,6 @@ def image_resize(image, width=None, height = None, inter = cv2.INTER_AREA):
   resized = cv2.resize(image, dim ,interpolation=inter)
   return resized
 
-def Conv_Pixel_Top_Left_TO_Center(img_width, img_height, x, y):
-     x_center=int(x-img_width/2)
-     y_center=int(y-img_height/2)
-     return x_center, y_center
 
 class ImagePublisher(Node):
   """
@@ -58,15 +61,10 @@ class ImagePublisher(Node):
     self.declare_parameter('db_cross_val_only', False)
     
     self.vision_filename = self.get_parameter('process_filename').value
-    #ament_index_python.get_resource('package', 'rclcpp')
 
-    # may raise PackageNotFoundError
     package_share_directory = get_package_share_directory('pm_vision')
     print(package_share_directory)
-    #äself.config_file_path = get_package_share_directory('pm_vision') + '/vision_assistant_path_config.yaml'
     self.path_config_path = get_package_share_directory('pm_vision') + '/vision_assistant_path_config.yaml'
-
-    #self.config_file_path= '/home/niklas/ros2_ws/src/pm_vision/config/vision_assistant_config.yaml'
 
     #self.publisher_ = self.create_publisher(Image, 'video_frames', 10)
     # Create image subscriber
@@ -86,12 +84,15 @@ class ImagePublisher(Node):
     self.process_start_time=timestamp.strftime("%d_%m_%Y_%H_%M_%S")
     # Used to convert between ROS and OpenCV images
     self.br = CvBridge()
-    self.counter_error_cross_val=0
-    self.VisionOK_cross_val=True
+
     self.load_path_config()
     self.load_assistant_config()
     self.load_process_file_metadata()
     self.load_camera_config()
+
+    self.counter_error_cross_val=0
+    self.VisionOK_cross_val=True
+    self.cross_val_running=False
 
     if self.get_parameter('db_cross_val_only').value:
       self.cycle_though_db()
@@ -143,6 +144,8 @@ class ImagePublisher(Node):
       self.magnification=config["magnification"]
       self.camera_axis_1=config["camera_axis_1"]
       self.camera_axis_2=config["camera_axis_2"]
+      self.camera_axis_1_angle=config["camera_axis_1_angle"]
+      self.camera_axis_2_angle=config["camera_axis_2_angle"]
       # Calculate Camera parameter
       self.pixelPROum=self.magnification/self.pixelsize
       self.umPROpixel=self.pixelsize/self.magnification
@@ -188,6 +191,65 @@ class ImagePublisher(Node):
     # Put logo in ROI and modify the main image
     displ_frame = cv2.add(img1_bg,img2_fg)
     return displ_frame
+
+  def CS_Conv_ROI_Pix_TO_Img_Pix(self,x_roi, y_roi):
+    if self.ROI_used:
+      x_img=self.ROI_CS_CV_top_left_x+x_roi
+      y_img=self.ROI_CS_CV_top_left_y+y_roi
+    else:
+      x_img=x_roi
+      y_img=y_roi
+    return x_img, y_img
+    
+  def CS_Conv_Pixel_Top_Left_TO_Center(self,img_width,img_height,x_tl, y_tl):
+     x_center=int(round(x_tl-img_width/2))
+     y_center=int(round(img_height/2-y_tl))
+     return x_center, y_center
+
+  def CS_Conv_Pixel_Center_TO_Top_Left(self,img_width, img_height, x_center, y_center):
+      x_tl=int(round(img_width/2)+x_center)
+      y_tl=int(round(img_height/2)-y_center)
+      return x_tl, y_tl
+  
+  def adaptImagewithROI(self, disp_frame, prcs_frame):
+    if self.ROI_used:
+      x_offset=self.ROI_CS_CV_top_left_x
+      y_offset=self.ROI_CS_CV_top_left_y
+      disp_frame[y_offset:y_offset+prcs_frame.shape[0],x_offset:x_offset+prcs_frame.shape[1]] = prcs_frame
+    else:
+      disp_frame=prcs_frame
+    return disp_frame
+
+  def CS_Camera_TO_Image(self, x_val_c, y_val_c):
+    if self.camera_axis_2_angle == '-':
+      y_val_c=-y_val_c
+    x_val_i = x_val_c*math.cos(2*pi-degrees_to_rads(self.camera_axis_1_angle))+y_val_c*math.sin(2*pi-degrees_to_rads(self.camera_axis_1_angle))
+    y_val_i = -x_val_c*math.sin(2*pi-degrees_to_rads(self.camera_axis_1_angle))+y_val_c*math.cos(2*pi-degrees_to_rads(self.camera_axis_1_angle))
+    return x_val_i, y_val_i
+  
+  def CS_Image_TO_Camera(self, x_val_i, y_val_i):
+    x_val_c = x_val_i*math.cos(degrees_to_rads(self.camera_axis_1_angle))+y_val_i*math.sin(degrees_to_rads(self.camera_axis_1_angle))
+    y_val_c = -x_val_i*math.sin(degrees_to_rads(self.camera_axis_1_angle))+y_val_i*math.cos(degrees_to_rads(self.camera_axis_1_angle))
+    if self.camera_axis_2_angle == '-':
+      y_val_c=-y_val_c
+    return x_val_c, y_val_c
+  
+  def CS_Image_TO_Pixel(self, x_val_i, y_val_i):
+    x_val_pix=int(round(self.pixelPROum*x_val_i))
+    y_val_pix=int(round(self.pixelPROum*y_val_i))
+    return x_val_pix, y_val_pix
+  
+  def CS_Pixel_TO_Image(self, x_val_pix, y_val_pix):
+    x_val_i=x_val_pix*self.umPROpixel 
+    y_val_i=y_val_pix*self.umPROpixel
+    return x_val_i, y_val_i
+  
+  def CS_CV_TO_camera_with_ROI(self, x_ROI, y_ROI):
+    x_tl,y_tl = self.CS_Conv_ROI_Pix_TO_Img_Pix(x_ROI,y_ROI)
+    x_center_pix, y_center_pix = self.CS_Conv_Pixel_Top_Left_TO_Center(self.img_width, self.img_height,x_tl,y_tl)
+    x_center_image_um, y_center_image_um = self.CS_Pixel_TO_Image(x_center_pix, y_center_pix)
+    x_cs_camera, y_cs_camera = self.CS_Image_TO_Camera(x_center_image_um, y_center_image_um)
+    return x_cs_camera, y_cs_camera
   
   def process_image(self,received_frame,_process_pipeline_list):
 
@@ -195,7 +257,7 @@ class ImagePublisher(Node):
     self.img_height = received_frame.shape[0]
     self.FOV_width=self.umPROpixel*self.img_width 
     self.FOV_height=self.umPROpixel*self.img_height
-
+    self.ROI_used=False
     print("FOV width is " + str(self.FOV_width) + "um")
     print("FOV hight is " + str(self.FOV_height) + "um")    
     frame_buffer=[]
@@ -215,11 +277,11 @@ class ImagePublisher(Node):
                 thresh = function_parameter['thresh']
                 maxval = function_parameter['maxval']
                 type = function_parameter['type'] 
-                if active == 'True':
+                if active:
                     _Command = "cv2." + type
                     _,frame_processed = cv2.threshold(frame_processed,thresh,maxval,exec(_Command))
                     print("Theshold executed")
-                    display_frame=frame_processed
+                    display_frame=self.adaptImagewithROI(display_frame,frame_processed)
                     frame_buffer.append(frame_processed)
             case "adaptiveThreshold":
                 active = function_parameter['active']
@@ -228,32 +290,61 @@ class ImagePublisher(Node):
                 thresholdType = function_parameter['thresholdType']
                 blockSize = function_parameter['blockSize'] 
                 C_Value = function_parameter['C']
-                if active == 'True':
+                if active:
                     _Command_adaptiveMethod = "cv2." + adaptiveMethod
                     _Command_thresholdType = "cv2." + thresholdType
                     frame_processed = cv2.adaptiveThreshold(frame_processed,maxValue,exec(_Command_adaptiveMethod),exec(_Command_thresholdType),blockSize,C_Value)
                     print("Adaptive Theshold executed")
-                    display_frame=frame_processed
+                    display_frame=self.adaptImagewithROI(display_frame,frame_processed)
                     frame_buffer.append(frame_processed)
             case "bitwise_not":
                 active = function_parameter['active']
-                if active == 'True':
+                if active:
                     frame_processed = cv2.bitwise_not(frame_processed)
                     print("bitwise_not executed")
-                    display_frame=frame_processed
+                    display_frame=self.adaptImagewithROI(display_frame,frame_processed)
                     frame_buffer.append(frame_processed)
 
             case "BGR2GRAY":
                 active = function_parameter['active']
-                if active == 'True':
+                if active:
                   if len(frame_processed.shape)==3:
                     frame_processed = cv2.cvtColor(frame_processed, cv2.COLOR_BGR2GRAY)
-                    display_frame=frame_processed
+                    display_frame=self.adaptImagewithROI(display_frame,frame_processed)
                     frame_buffer.append(frame_processed)
                     print("BGR2GRAY executed")
                   else:
                     print("BGR2GRAY ignored! Image is already Grayscale!")
-                       
+
+            case "ROI":
+                active = function_parameter['active']
+                if active:
+                  if not self.ROI_used:
+                    ROI_center_x_c = function_parameter['ROI_center_x']
+                    ROI_center_y_c = function_parameter['ROI_center_y']
+                    ROI_height = function_parameter['ROI_height']
+                    ROI_width = function_parameter['ROI_width']
+                    ROI_center_x_i, ROI_center_y_i = self.CS_Camera_TO_Image(ROI_center_x_c,ROI_center_y_c)
+                    ROI_center_x_pix, ROI_center_y_pix = self.CS_Image_TO_Pixel(ROI_center_x_i, ROI_center_y_i)
+                    ROI_half_height_pix = int(round(self.pixelPROum*ROI_height/2))
+                    ROI_half_width_pix = int(round(self.pixelPROum*ROI_width/2))
+                    ROI_top_left_x_pix = ROI_center_x_pix - ROI_half_width_pix
+                    ROI_bottom_right_x_pix = ROI_center_x_pix + ROI_half_width_pix
+                    ROI_top_left_y_pix = ROI_center_y_pix + ROI_half_height_pix
+                    ROI_bottom_right_y_pix = ROI_center_y_pix - ROI_half_height_pix
+                    self.ROI_CS_CV_top_left_x, self.ROI_CS_CV_top_left_y = self.CS_Conv_Pixel_Center_TO_Top_Left(frame_processed.shape[1], frame_processed.shape[0], ROI_top_left_x_pix, ROI_top_left_y_pix)
+                    self.ROI_CS_CV_bottom_right_x, self.ROI_CS_CV_bottom_right_y = self.CS_Conv_Pixel_Center_TO_Top_Left(frame_processed.shape[1], frame_processed.shape[0], ROI_bottom_right_x_pix, ROI_bottom_right_y_pix)
+                    if self.ROI_CS_CV_top_left_x>0 and self.ROI_CS_CV_top_left_y>0 and self.ROI_CS_CV_bottom_right_x <= self.img_width and self.ROI_CS_CV_bottom_right_y <= self.img_height:
+                      frame_processed = frame_processed[self.ROI_CS_CV_top_left_y:self.ROI_CS_CV_bottom_right_y, self.ROI_CS_CV_top_left_x:self.ROI_CS_CV_bottom_right_x]
+                      self.ROI_used = True
+                      cv2.rectangle(frame_visual_elements,(self.ROI_CS_CV_top_left_x,self.ROI_CS_CV_top_left_y),(self.ROI_CS_CV_bottom_right_x,self.ROI_CS_CV_bottom_right_y),(240,32,160),3)
+                      display_frame=self.adaptImagewithROI(display_frame,frame_processed)
+                      print("ROI executed")
+                    else:
+                      self.VisionOK=False
+                      self.get_logger().error('ROI failed! Out of bounds')
+                  else:
+                    self.get_logger().warning('ROI already used! ROI can only be applied once!')                
 
             case "Canny":
                 active = function_parameter['active']
@@ -261,10 +352,10 @@ class ImagePublisher(Node):
                 threshold2 = function_parameter['threshold2']
                 aperatureSize = function_parameter['aperatureSize']
                 L2gradient = function_parameter['L2gradient'] 
-                if active == 'True':
+                if active:
                     frame_processed = cv2.Canny(frame_processed,threshold1,threshold2,aperatureSize)
                     print("Canny executed")
-                    display_frame=frame_processed
+                    display_frame=self.adaptImagewithROI(display_frame,frame_processed)
                     frame_buffer.append(frame_processed)
 
             case "findContours":
@@ -273,17 +364,17 @@ class ImagePublisher(Node):
                 mode = function_parameter['mode']
                 method = function_parameter['method']
                 fill = function_parameter['fill']
-                if active == 'True':
+                if active:
                     _Command_mode = "cv2." + mode
                     _Command_method = "cv2." + method
                     #contours, hierarchy  = cv2.findContours(frame_processed, exec(_Command_mode), exec(_Command_method))  # Keine Ahnung warum das nicht funktioniert!!!
                     #print(_Command_method)
                     contours, hierarchy  = cv2.findContours(frame_processed, exec(_Command_mode), cv2.CHAIN_APPROX_SIMPLE)
-                    if fill =="True":
+                    if fill:
                       cv2.fillPoly(frame_processed,pts=contours,color=(255,255,255))
-                      display_frame=frame_processed
+                      display_frame=self.adaptImagewithROI(display_frame,frame_processed)
                       frame_buffer.append(frame_processed)
-                    if draw_contours == 'True':
+                    if draw_contours:
                       cv2.drawContours(frame_visual_elements, contours, -1, (0,255,75), 2)
                     print("findContours executed")
 
@@ -293,7 +384,7 @@ class ImagePublisher(Node):
                 method = function_parameter['method']
                 max_area = function_parameter['max_area']
                 min_area = function_parameter['min_area']
-                if active == 'True':
+                if active:
                     _Command_mode = "cv2." + mode
                     _Command_method = "cv2." + method
                     #contours, hierarchy  = cv2.findContours(frame_processed, exec(_Command_mode), exec(_Command_method))  # Keine Ahnung warum das nicht funktioniert!!!
@@ -314,7 +405,7 @@ class ImagePublisher(Node):
                       self.VisionOK = False
                       self.counter_error_cross_val += 1
                       print("No matching Area")
-                    display_frame = frame_processed
+                    display_frame=self.adaptImagewithROI(display_frame,frame_processed)
                     frame_buffer.append(frame_processed)
                     print("select_Area executed")
 
@@ -322,10 +413,10 @@ class ImagePublisher(Node):
                 active = function_parameter['active']
                 kernelsize = function_parameter['kernelsize']
     
-                if active == 'True':
+                if active:
                     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kernelsize, kernelsize))
                     frame_processed = cv2.morphologyEx(frame_processed, cv2.MORPH_OPEN, kernel)
-                    display_frame=frame_processed
+                    display_frame=self.adaptImagewithROI(display_frame,frame_processed)
                     frame_buffer.append(frame_processed)
                     print("Morphology_Ex_Opening executed")
 
@@ -333,26 +424,34 @@ class ImagePublisher(Node):
                 active = function_parameter['active']
                 prefix = function_parameter['prefix']
                 with_vision_elements = function_parameter['with_vision_elements']
-                if active == 'True':
+                save_in_cross_val = function_parameter['save_in_cross_val']
+                if active:
                     
                     if not os.path.exists(self.process_db_path):
                       os.makedirs(self.process_db_path)
                       print("Process DB folder created!")
                     
                     image_name=self.process_db_path+"/"+self.vision_process_id+"_"+self.process_start_time+prefix+".png"
-                    if not os.path.isfile(image_name):
-                      cv2.imwrite(image_name,frame_processed)
+
+                    if not os.path.isfile(image_name) and (not self.cross_val_running or save_in_cross_val):
+                      if with_vision_elements:
+                        display_frame=self.adaptImagewithROI(display_frame,frame_processed)
+                        image_to_save = self.create_vision_element_overlay(display_frame,frame_visual_elements)
+                      else:
+                         image_to_save = frame_processed
+                      cv2.imwrite(image_name,image_to_save)
                       print("Image saved!")
                     print("save_image executed")
                     
-            case "Draw_Grid":
+            case "Draw_Grid1":
                 active = function_parameter['active']
                 grid_spacing = function_parameter['grid_spacing']
                 
-                if active == 'True':
-                    numb_horizontal = int((self.FOV_height/2)/grid_spacing)+1
-                    numb_vertical = int((self.FOV_width/2)/grid_spacing)+1
+                if active:
+                    numb_horizontal = int(round((self.FOV_height/2)/grid_spacing))+1
+                    numb_vertical = int(round((self.FOV_width/2)/grid_spacing))+1
                     cv2.putText(img=frame_visual_elements,text="Grid: "+ str(grid_spacing) + "um", org=(5,30), fontFace=cv2.FONT_HERSHEY_SIMPLEX,fontScale=1,color=(255,0,0), thickness=1)
+
                     cv2.line(frame_visual_elements, (int(display_frame.shape[1]/2), 0),(int(display_frame.shape[1]/2), display_frame.shape[1]), (255, 0, 0), 1, 1)
                     cv2.line(frame_visual_elements, (0,int(display_frame.shape[0]/2)),(int(display_frame.shape[1]), int(display_frame.shape[0]/2)), (255, 0, 0), 1, 1)
                     #Draw horizontal lines
@@ -367,6 +466,58 @@ class ImagePublisher(Node):
                       cv2.line(frame_visual_elements, (int(display_frame.shape[1]/2)-pixel_delta, 0),(int(display_frame.shape[1]/2)-pixel_delta, display_frame.shape[1]), (255, 0, 0), 1, 1)
                     print("Grid executed")
 
+            case "Draw_CS":
+              active = function_parameter['active']
+              if active:
+                # Does not work for alpha >90 yet
+                p_x_centerline=-1*int(round(math.tan(degrees_to_rads(self.camera_axis_1_angle))*round(display_frame.shape[0]/2)))
+                p_y_centerline=int(round(display_frame.shape[0]/2))
+                p1_x_v_centerline_tl, p1_y_v_centerline_tl = self.CS_Conv_Pixel_Center_TO_Top_Left(display_frame.shape[1],display_frame.shape[0],p_x_centerline,p_y_centerline)
+                p2_x_v_centerline_tl, p2_y_v_centerline_tl = self.CS_Conv_Pixel_Center_TO_Top_Left(display_frame.shape[1],display_frame.shape[0],-p_x_centerline,-p_y_centerline)
+                p0_x_center_tl, p0_y_center_tl =self.CS_Conv_Pixel_Center_TO_Top_Left(display_frame.shape[1],display_frame.shape[0],0,0)
+                if self.camera_axis_2_angle == '+':
+                  cv2.line(frame_visual_elements, (p0_x_center_tl, p0_y_center_tl),(p1_x_v_centerline_tl, p1_y_v_centerline_tl), (255, 0, 0), 3, 1)
+                else:
+                  cv2.line(frame_visual_elements, (p0_x_center_tl, p0_y_center_tl),(p2_x_v_centerline_tl, p2_y_v_centerline_tl), (255, 0, 0), 3, 1)
+                cv2.line(frame_visual_elements, (p0_x_center_tl, p0_y_center_tl),(p1_x_h_centerline_tl, p1_y_h_centerline_tl), (255, 0, 0), 3, 1)
+                print("Draw_Cs executed!")
+
+            case "Draw_Grid":
+              active = function_parameter['active']
+              grid_spacing = function_parameter['grid_spacing']
+              
+              if active:
+                numb_horizontal = int(round((self.FOV_height/2)/grid_spacing))+1
+                numb_vertical = int(round((self.FOV_width/2)/grid_spacing))+1
+                cv2.putText(img=frame_visual_elements,text="Grid: "+ str(grid_spacing) + "um", org=(5,30), fontFace=cv2.FONT_HERSHEY_SIMPLEX,fontScale=1,color=(255,0,0), thickness=1)
+
+                # vertical center line
+                p_x_centerline=-1*int(round(math.tan(degrees_to_rads(self.camera_axis_1_angle))*round(display_frame.shape[0]/2)))
+                p_y_centerline=int(round(display_frame.shape[0]/2))
+                p1_x_v_centerline_tl, p1_y_v_centerline_tl = self.CS_Conv_Pixel_Center_TO_Top_Left(display_frame.shape[1],display_frame.shape[0],p_x_centerline,p_y_centerline)
+                p2_x_v_centerline_tl, p2_y_v_centerline_tl = self.CS_Conv_Pixel_Center_TO_Top_Left(display_frame.shape[1],display_frame.shape[0],-p_x_centerline,-p_y_centerline)
+                cv2.line(frame_visual_elements, (p1_x_v_centerline_tl, p1_y_v_centerline_tl),(p2_x_v_centerline_tl, p2_y_v_centerline_tl), (255, 0, 0), 1, 1)
+                
+                # horizontal center line
+                p_y_centerline=int(round(math.tan(degrees_to_rads(self.camera_axis_1_angle))*round(display_frame.shape[1]/2)))
+                p_x_centerline=int(round(display_frame.shape[1]/2))
+                p1_x_h_centerline_tl, p1_y_h_centerline_tl = self.CS_Conv_Pixel_Center_TO_Top_Left(display_frame.shape[1],display_frame.shape[0],p_x_centerline,p_y_centerline)
+                p2_x_h_centerline_tl, p2_y_h_centerline_tl = self.CS_Conv_Pixel_Center_TO_Top_Left(display_frame.shape[1],display_frame.shape[0],-p_x_centerline,-p_y_centerline)
+                cv2.line(frame_visual_elements, (p1_x_h_centerline_tl, p1_y_h_centerline_tl),(p2_x_h_centerline_tl, p2_y_h_centerline_tl), (255, 0, 0), 1, 1)
+                
+                # draw horizontal lines
+                grid_spacing_t = int(round(math.cos(degrees_to_rads(self.camera_axis_1_angle))*grid_spacing*self.pixelPROum))
+
+                for numb_h in range(numb_horizontal):
+                  cv2.line(frame_visual_elements, (p1_x_h_centerline_tl, p1_y_h_centerline_tl+numb_h*grid_spacing_t),(p2_x_h_centerline_tl, p2_y_h_centerline_tl+numb_h*grid_spacing_t), (255, 0, 0), 1, 1)
+                  cv2.line(frame_visual_elements, (p1_x_h_centerline_tl, p1_y_h_centerline_tl-numb_h*grid_spacing_t),(p2_x_h_centerline_tl, p2_y_h_centerline_tl-numb_h*grid_spacing_t), (255, 0, 0), 1, 1)
+                # draw vertical lines
+                for numb_v in range(numb_vertical):
+                  pixel_delta=int(numb_v*grid_spacing*self.pixelPROum)
+                  cv2.line(frame_visual_elements, (p1_x_v_centerline_tl+grid_spacing_t*numb_v, p1_y_v_centerline_tl),(p2_x_v_centerline_tl+grid_spacing_t*numb_v, p2_y_v_centerline_tl), (255, 0, 0), 1, 1)
+                  cv2.line(frame_visual_elements, (p1_x_v_centerline_tl-grid_spacing_t*numb_v, p1_y_v_centerline_tl),(p2_x_v_centerline_tl-grid_spacing_t*numb_v, p2_y_v_centerline_tl), (255, 0, 0), 1, 1)
+                print("Grid executed2")
+
             case "HoughCircles":
                 active = function_parameter['active']
                 draw_circles = function_parameter['draw_circles']
@@ -375,9 +526,9 @@ class ImagePublisher(Node):
                 minDist = function_parameter['minDist']
                 param1 = function_parameter['param1']
                 param2 = function_parameter['param2']
-                minRadius = int(function_parameter['minRadius']* self.pixelPROum) # conv in Pixel
-                maxRadius = int(function_parameter['maxRadius']* self.pixelPROum) # conv in Pixel
-                if active == 'True':
+                minRadius = int(round(function_parameter['minRadius']* self.pixelPROum)) # conv in Pixel
+                maxRadius = int(round(function_parameter['maxRadius']* self.pixelPROum)) # conv in Pixel
+                if active:
                   _Command_method = "cv2." + method
                   #print(_Command_method)
                   try:
@@ -386,21 +537,22 @@ class ImagePublisher(Node):
                       print("Cirlces Detected")
                       # Convert the circle parameters a, b and r to integers.
                       detected_circles = np.uint16(np.around(detected_circles))
-                      if draw_circles == 'True':
+                      if draw_circles:
                         for pt in detected_circles[0, :]:
-                          x, y, r = pt[0], pt[1], pt[2]                          
-                          x_center_pix, y_center_pix =Conv_Pixel_Top_Left_TO_Center(frame_processed.shape[1], frame_processed.shape[0],x,y)
-                          x_center_um=x_center_pix*self.umPROpixel
-                          y_center_um=y_center_pix*self.umPROpixel
+                          x, y, r = pt[0], pt[1], pt[2]
+
+                          x_cs_camera, y_cs_camera = self.CS_CV_TO_camera_with_ROI(x,y)
+                          x_tl,y_tl = self.CS_Conv_ROI_Pix_TO_Img_Pix(x,y)
+
                           radius_um=r*self.umPROpixel
-                          print('X-Coordinate: '+ str(x_center_um))
-                          print('X-Coordinate: '+ str(y_center_um))
+                          print(str(self.camera_axis_1)+'-Coordinate: '+ str(x_cs_camera))
+                          print(str(self.camera_axis_2)+'-Coordinate: '+ str(y_cs_camera))
                           print('Radius: '+ str(radius_um))
                           # Conv to RGB to add Circles to display
                           # Draw the circumference of the circle.
-                          cv2.circle(frame_visual_elements, (x, y), r, (0, 255, 0), 2)
+                          cv2.circle(frame_visual_elements, (x_tl, y_tl), r, (0, 255, 0), 2)
                           # Draw a small circle (of radius 1) to show the center.
-                          cv2.circle(frame_visual_elements, (x, y), 1, (0, 0, 255), 2)
+                          cv2.circle(frame_visual_elements, (x_tl, y_tl), 1, (0, 0, 255), 2)
                     else:
                       self.VisionOK=False
                       self.counter_error_cross_val += 1
@@ -446,6 +598,7 @@ class ImagePublisher(Node):
   def run_crossvalidation(self):
     # Starting cross validation with images in folder
     if self.cross_validation:
+      self.cross_val_running = True
       self.counter_error_cross_val=0
       self.VisionOK_cross_val=True
       print("----------------------------")
@@ -482,6 +635,7 @@ class ImagePublisher(Node):
       else:
         print("Crossvalidation error!")
         self.get_logger().warning('Crossvalidation had errors! ' + str(self.counter_error_cross_val)+"/"+str(numb_images_cross_val)+" images had errors!")
+    self.cross_val_running = False
   
   def Vision_callback(self,data):
 

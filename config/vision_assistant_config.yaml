@@ -1,5 +1,5 @@
 vision_assistant_config:
-  cross_validation: True    #test
+  cross_validation: False    #test
   show_image_on_error: False
   step_though_images: False
   image_display_time_in_execution_mode: 5
