@@ -18,6 +18,7 @@ import subprocess
 from ament_index_python.packages import get_package_share_directory
 import math
 from math import pi
+import time
 
 def get_screen_resolution():
    output = subprocess.Popen('xrandr | grep "\*" | cut -d " " -f4', shell=True, stdout=subprocess.PIPE).communicate()[0]
@@ -29,6 +30,12 @@ def degrees_to_rads(deg):
 
 def rads_to_degrees(rad):
   return (180.0*rad)/pi
+
+def rotate_image(image, angle):
+  image_center = tuple(np.array(image.shape[1::-1]) / 2)
+  rot_mat = cv2.getRotationMatrix2D(image_center, angle, 1.0)
+  result = cv2.warpAffine(image, rot_mat, image.shape[1::-1], flags=cv2.INTER_LINEAR)
+  return result
 
 def image_resize(image, width=None, height = None, inter = cv2.INTER_AREA):
   dim = None
@@ -347,142 +354,276 @@ class ImagePublisher(Node):
                     self.get_logger().warning('ROI already used! ROI can only be applied once!')                
 
             case "Canny":
-                active = function_parameter['active']
-                threshold1 = function_parameter['threshold1']
-                threshold2 = function_parameter['threshold2']
-                aperatureSize = function_parameter['aperatureSize']
-                L2gradient = function_parameter['L2gradient'] 
-                if active:
-                    frame_processed = cv2.Canny(frame_processed,threshold1,threshold2,aperatureSize)
-                    print("Canny executed")
-                    display_frame=self.adaptImagewithROI(display_frame,frame_processed)
-                    frame_buffer.append(frame_processed)
+              active = function_parameter['active']
+              threshold1 = function_parameter['threshold1']
+              threshold2 = function_parameter['threshold2']
+              aperatureSize = function_parameter['aperatureSize']
+              L2gradient = function_parameter['L2gradient'] 
+              if active:
+                  frame_processed = cv2.Canny(frame_processed,threshold1,threshold2,aperatureSize)
+                  print("Canny executed")
+                  display_frame=self.adaptImagewithROI(display_frame,frame_processed)
+                  frame_buffer.append(frame_processed)
 
             case "findContours":
-                active = function_parameter['active']
-                draw_contours = function_parameter['draw_contours']
-                mode = function_parameter['mode']
-                method = function_parameter['method']
-                fill = function_parameter['fill']
-                if active:
-                    _Command_mode = "cv2." + mode
-                    _Command_method = "cv2." + method
-                    #contours, hierarchy  = cv2.findContours(frame_processed, exec(_Command_mode), exec(_Command_method))  # Keine Ahnung warum das nicht funktioniert!!!
-                    #print(_Command_method)
-                    contours, hierarchy  = cv2.findContours(frame_processed, exec(_Command_mode), cv2.CHAIN_APPROX_SIMPLE)
-                    if fill:
-                      cv2.fillPoly(frame_processed,pts=contours,color=(255,255,255))
-                      display_frame=self.adaptImagewithROI(display_frame,frame_processed)
-                      frame_buffer.append(frame_processed)
-                    if draw_contours:
-                      cv2.drawContours(frame_visual_elements, contours, -1, (0,255,75), 2)
-                    print("findContours executed")
+              active = function_parameter['active']
+              draw_contours = function_parameter['draw_contours']
+              mode = function_parameter['mode']
+              method = function_parameter['method']
+              fill = function_parameter['fill']
+              if active:
+                  _Command_mode = "cv2." + mode
+                  _Command_method = "cv2." + method
+                  #contours, hierarchy  = cv2.findContours(frame_processed, exec(_Command_mode), exec(_Command_method))  # Keine Ahnung warum das nicht funktioniert!!!
+                  #print(_Command_method)
+                  contours, hierarchy  = cv2.findContours(frame_processed, exec(_Command_mode), cv2.CHAIN_APPROX_SIMPLE)
+                  if fill:
+                    cv2.fillPoly(frame_processed,pts=contours,color=(255,255,255))
+                    display_frame=self.adaptImagewithROI(display_frame,frame_processed)
+                    frame_buffer.append(frame_processed)
+                  if draw_contours:
+                    cv2.drawContours(frame_visual_elements, contours, -1, (0,255,75), 2)
+                  print("findContours executed")
+
+            case "HoughLinesP":
+              active = function_parameter['active']
+              threshold = function_parameter['threshold']
+              minLineLength = function_parameter['minLineLength']
+              maxLineGap = function_parameter['maxLineGap']
+              
+              if active:
+                lines = cv2.HoughLinesP(frame_processed,rho = 1,theta = 1*np.pi/180,threshold = threshold,minLineLength = minLineLength,maxLineGap = maxLineGap)
+                if lines is not None:
+                  for x1,y1,x2,y2 in lines[0]:
+                    print(x1)
+                    print(y1)
+                    x1,y1 = self.CS_Conv_ROI_Pix_TO_Img_Pix(x1,y1)
+                    x2,y2 = self.CS_Conv_ROI_Pix_TO_Img_Pix(x2,y2)
+                    cv2.line(frame_visual_elements,(x1,y1),(x2,y2),(0,255,0),2)
+                else:
+                  self.VisionOK=False
+                  self.counter_error_cross_val += 1
+                  self.get_logger().error('No Line detected!')
+              print("HoughLinesP executed")
 
             case "select_Area":
-                active = function_parameter['active']
-                mode = function_parameter['mode']
-                method = function_parameter['method']
-                max_area = function_parameter['max_area']
-                min_area = function_parameter['min_area']
-                if active:
-                    _Command_mode = "cv2." + mode
-                    _Command_method = "cv2." + method
-                    #contours, hierarchy  = cv2.findContours(frame_processed, exec(_Command_mode), exec(_Command_method))  # Keine Ahnung warum das nicht funktioniert!!!
-                    contours, hierarchy  = cv2.findContours(frame_processed, exec(_Command_mode), cv2.CHAIN_APPROX_SIMPLE)
-                    all_areas= []
-                    for cnt in contours:
-                        area= cv2.contourArea(cnt)
-                        all_areas.append(area)
-                    contour_frame = np.zeros((frame_processed.shape[0], frame_processed.shape[1]), dtype = np.uint8)
+              active = function_parameter['active']
+              mode = function_parameter['mode']
+              method = function_parameter['method']
+              max_area = function_parameter['max_area']
+              min_area = function_parameter['min_area']
+              if active:
+                  _Command_mode = "cv2." + mode
+                  _Command_method = "cv2." + method
+                  #contours, hierarchy  = cv2.findContours(frame_processed, exec(_Command_mode), exec(_Command_method))  # Keine Ahnung warum das nicht funktioniert!!!
+                  contours, hierarchy  = cv2.findContours(frame_processed, exec(_Command_mode), cv2.CHAIN_APPROX_SIMPLE)
+                  all_areas= []
+                  for cnt in contours:
+                      area= cv2.contourArea(cnt)
+                      all_areas.append(area)
+                  contour_frame = np.zeros((frame_processed.shape[0], frame_processed.shape[1]), dtype = np.uint8)
+                  self.VisionOK = False
+                  for index, area_item in enumerate(all_areas):
+                      
+                      if area_item<max_area and area_item>min_area:
+                        frame_processed = cv2.drawContours(contour_frame, contours, index, color=(255,255,255), thickness=cv2.FILLED)
+                        self.VisionOK = True
+                                    
+                  if not self.VisionOK:
                     self.VisionOK = False
-                    for index, area_item in enumerate(all_areas):
-                        
-                        if area_item<max_area and area_item>min_area:
-                          frame_processed = cv2.drawContours(contour_frame, contours, index, color=(255,255,255), thickness=cv2.FILLED)
-                          self.VisionOK = True
-                                      
-                    if not self.VisionOK:
-                      self.VisionOK = False
-                      self.counter_error_cross_val += 1
-                      print("No matching Area")
-                    display_frame=self.adaptImagewithROI(display_frame,frame_processed)
-                    frame_buffer.append(frame_processed)
-                    print("select_Area executed")
+                    self.counter_error_cross_val += 1
+                    print("No matching Area")
+                  display_frame=self.adaptImagewithROI(display_frame,frame_processed)
+                  frame_buffer.append(frame_processed)
+                  print("select_Area executed")
 
             case "Morphology_Ex_Opening":
-                active = function_parameter['active']
-                kernelsize = function_parameter['kernelsize']
-    
-                if active:
-                    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kernelsize, kernelsize))
-                    frame_processed = cv2.morphologyEx(frame_processed, cv2.MORPH_OPEN, kernel)
-                    display_frame=self.adaptImagewithROI(display_frame,frame_processed)
-                    frame_buffer.append(frame_processed)
-                    print("Morphology_Ex_Opening executed")
+              active = function_parameter['active']
+              kernelsize = function_parameter['kernelsize']
+  
+              if active:
+                kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kernelsize, kernelsize))
+                frame_processed = cv2.morphologyEx(frame_processed, cv2.MORPH_OPEN, kernel)
+                display_frame=self.adaptImagewithROI(display_frame,frame_processed)
+                frame_buffer.append(frame_processed)
+                print("Morphology_Ex_Opening executed")
+
+            case "Morphology_Ex_Closing":
+              active = function_parameter['active']
+              kernelsize = function_parameter['kernelsize']
+  
+              if active:
+                kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kernelsize, kernelsize))
+                frame_processed = cv2.morphologyEx(frame_processed, cv2.MORPH_CLOSE, kernel)
+                display_frame=self.adaptImagewithROI(display_frame,frame_processed)
+                frame_buffer.append(frame_processed)
+                print("Morphology_Ex_Closing executed")
+
+            case "Blur":
+              active = function_parameter['active']
+              kernelsize = function_parameter['kernelsize']
+              blur_type = function_parameter['type']
+  
+              if active:
+                if blur_type == "GaussianBlur":
+                  frame_processed = cv2.GaussianBlur(frame_processed, (kernelsize, kernelsize),0)
+                elif blur_type == "Blur":
+                  frame_processed = cv2.blur(frame_processed, (kernelsize, kernelsize))
+                elif blur_type == "medianBlur":
+                  frame_processed = cv2.medianBlur(frame_processed, kernelsize)
+                else:
+                  self.get_logger().error('Blur type not supported!')
+                  self.VisionOK = False
+
+                display_frame=self.adaptImagewithROI(display_frame,frame_processed)
+                frame_buffer.append(frame_processed)
+                print("Blur executed")                
+
+            case "Morphology_Ex_Gradient":
+              active = function_parameter['active']
+              kernelsize = function_parameter['kernelsize']
+  
+              if active:
+                kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kernelsize, kernelsize))
+                frame_processed = cv2.morphologyEx(frame_processed, cv2.MORPH_GRADIENT, kernel)
+                display_frame=self.adaptImagewithROI(display_frame,frame_processed)
+                frame_buffer.append(frame_processed)
+                print("Morphology_Ex_Gradient executed")
+
+            case "Errosion":
+              active = function_parameter['active']
+              kernelsize = function_parameter['kernelsize']
+              iterations = function_parameter['iterations']
+  
+              if active:
+                kernel = np.ones((kernelsize, kernelsize), np.uint8)
+                frame_processed = cv2.erode(frame_processed, kernel, iterations=iterations)
+                display_frame=self.adaptImagewithROI(display_frame,frame_processed)
+                frame_buffer.append(frame_processed)
+                print("Errosion executed")
+
+            case "Dilation":
+              active = function_parameter['active']
+              kernelsize = function_parameter['kernelsize']
+              iterations = function_parameter['iterations']
+  
+              if active:
+                kernel = np.ones((kernelsize, kernelsize), np.uint8)
+                frame_processed = cv2.dilate(frame_processed, kernel, iterations=iterations)
+                display_frame=self.adaptImagewithROI(display_frame,frame_processed)
+                frame_buffer.append(frame_processed)
+                print("Dilation executed")
 
             case "save_image":
-                active = function_parameter['active']
-                prefix = function_parameter['prefix']
-                with_vision_elements = function_parameter['with_vision_elements']
-                save_in_cross_val = function_parameter['save_in_cross_val']
-                if active:
-                    
-                    if not os.path.exists(self.process_db_path):
-                      os.makedirs(self.process_db_path)
-                      print("Process DB folder created!")
-                    
-                    image_name=self.process_db_path+"/"+self.vision_process_id+"_"+self.process_start_time+prefix+".png"
+              active = function_parameter['active']
+              prefix = function_parameter['prefix']
+              with_vision_elements = function_parameter['with_vision_elements']
+              save_in_cross_val = function_parameter['save_in_cross_val']
+              if active:
+                  
+                  if not os.path.exists(self.process_db_path):
+                    os.makedirs(self.process_db_path)
+                    print("Process DB folder created!")
+                  
+                  image_name=self.process_db_path+"/"+self.vision_process_id+"_"+self.process_start_time+prefix+".png"
 
-                    if not os.path.isfile(image_name) and (not self.cross_val_running or save_in_cross_val):
-                      if with_vision_elements:
-                        display_frame=self.adaptImagewithROI(display_frame,frame_processed)
-                        image_to_save = self.create_vision_element_overlay(display_frame,frame_visual_elements)
-                      else:
-                         image_to_save = frame_processed
-                      cv2.imwrite(image_name,image_to_save)
-                      print("Image saved!")
-                    print("save_image executed")
+                  if not os.path.isfile(image_name) and (not self.cross_val_running or save_in_cross_val):
+                    if with_vision_elements:
+                      display_frame=self.adaptImagewithROI(display_frame,frame_processed)
+                      image_to_save = self.create_vision_element_overlay(display_frame,frame_visual_elements)
+                    else:
+                        image_to_save = frame_processed
+                    cv2.imwrite(image_name,image_to_save)
+                    print("Image saved!")
+                  print("save_image executed")
                     
-            case "Draw_Grid1":
-                active = function_parameter['active']
-                grid_spacing = function_parameter['grid_spacing']
+            case "Draw_Grid_without_rotation":
+              active = function_parameter['active']
+              grid_spacing = function_parameter['grid_spacing']
+              if active:
+                  numb_horizontal = int(round((self.FOV_height/2)/grid_spacing))+1
+                  numb_vertical = int(round((self.FOV_width/2)/grid_spacing))+1
+                  cv2.putText(img=frame_visual_elements,text="Grid: "+ str(grid_spacing) + "um", org=(5,30), fontFace=cv2.FONT_HERSHEY_SIMPLEX,fontScale=1,color=(255,0,0), thickness=1)
+
+                  cv2.line(frame_visual_elements, (int(display_frame.shape[1]/2), 0),(int(display_frame.shape[1]/2), display_frame.shape[1]), (255, 0, 0), 1, 1)
+                  cv2.line(frame_visual_elements, (0,int(display_frame.shape[0]/2)),(int(display_frame.shape[1]), int(display_frame.shape[0]/2)), (255, 0, 0), 1, 1)
+                  #Draw horizontal lines
+                  for numb_h in range(numb_horizontal):
+                    pixel_delta=int(numb_h*grid_spacing*self.pixelPROum)
+                    cv2.line(frame_visual_elements, (0,int(display_frame.shape[0]/2)+pixel_delta),(int(display_frame.shape[1]), int(display_frame.shape[0]/2)+pixel_delta), (255, 0, 0), 1, 1)
+                    cv2.line(frame_visual_elements, (0,int(display_frame.shape[0]/2)-pixel_delta),(int(display_frame.shape[1]), int(display_frame.shape[0]/2)-pixel_delta), (255, 0, 0), 1, 1)
+                  # draw vertical lines
+                  for numb_v in range(numb_vertical):
+                    pixel_delta=int(numb_v*grid_spacing*self.pixelPROum)
+                    cv2.line(frame_visual_elements, (int(display_frame.shape[1]/2)+pixel_delta, 0),(int(display_frame.shape[1]/2)+pixel_delta, display_frame.shape[1]), (255, 0, 0), 1, 1)
+                    cv2.line(frame_visual_elements, (int(display_frame.shape[1]/2)-pixel_delta, 0),(int(display_frame.shape[1]/2)-pixel_delta, display_frame.shape[1]), (255, 0, 0), 1, 1)
+                  print("Grid executed")
+
+            case "Draw_Grid":
+              active = function_parameter['active']
+              grid_spacing = function_parameter['grid_spacing']
+              
+              if active:
+                Grid_frame = np.zeros((received_frame.shape[0]+received_frame.shape[1], received_frame.shape[0]+received_frame.shape[1], 3), dtype = np.uint8)
+                numb = int(round((Grid_frame.shape[0]/2)/grid_spacing*self.pixelPROum))+1
+
+                cv2.line(Grid_frame, (int(Grid_frame.shape[1]/2), 0),(int(Grid_frame.shape[1]/2), Grid_frame.shape[1]), (255, 0, 0), 1, 1)
+                cv2.line(Grid_frame, (0,int(Grid_frame.shape[0]/2)),(int(Grid_frame.shape[1]), int(Grid_frame.shape[0]/2)), (255, 0, 0), 1, 1)
                 
-                if active:
-                    numb_horizontal = int(round((self.FOV_height/2)/grid_spacing))+1
-                    numb_vertical = int(round((self.FOV_width/2)/grid_spacing))+1
-                    cv2.putText(img=frame_visual_elements,text="Grid: "+ str(grid_spacing) + "um", org=(5,30), fontFace=cv2.FONT_HERSHEY_SIMPLEX,fontScale=1,color=(255,0,0), thickness=1)
+                for n in range(numb):
+                  #Draw horizontal lines
+                  pixel_delta=int(n*grid_spacing*self.pixelPROum)
+                  cv2.line(Grid_frame, (0,int(Grid_frame.shape[0]/2)+pixel_delta),(int(Grid_frame.shape[1]), int(Grid_frame.shape[0]/2)+pixel_delta), (255, 0, 0), 1, 1)
+                  cv2.line(Grid_frame, (0,int(Grid_frame.shape[0]/2)-pixel_delta),(int(Grid_frame.shape[1]), int(Grid_frame.shape[0]/2)-pixel_delta), (255, 0, 0), 1, 1)
+                  # draw vertical lines
+                  cv2.line(Grid_frame, (int(Grid_frame.shape[1]/2)+pixel_delta, 0),(int(Grid_frame.shape[1]/2)+pixel_delta, Grid_frame.shape[1]), (255, 0, 0), 1, 1)
+                  cv2.line(Grid_frame, (int(Grid_frame.shape[1]/2)-pixel_delta, 0),(int(Grid_frame.shape[1]/2)-pixel_delta, Grid_frame.shape[1]), (255, 0, 0), 1, 1)
+                  
+                Grid_frame= rotate_image(Grid_frame,self.camera_axis_1_angle)
+                center = Grid_frame.shape
+                x = center[1]/2 - self.img_width/2
+                y = center[0]/2 - self.img_height/2
 
-                    cv2.line(frame_visual_elements, (int(display_frame.shape[1]/2), 0),(int(display_frame.shape[1]/2), display_frame.shape[1]), (255, 0, 0), 1, 1)
-                    cv2.line(frame_visual_elements, (0,int(display_frame.shape[0]/2)),(int(display_frame.shape[1]), int(display_frame.shape[0]/2)), (255, 0, 0), 1, 1)
-                    #Draw horizontal lines
-                    for numb_h in range(numb_horizontal):
-                      pixel_delta=int(numb_h*grid_spacing*self.pixelPROum)
-                      cv2.line(frame_visual_elements, (0,int(display_frame.shape[0]/2)+pixel_delta),(int(display_frame.shape[1]), int(display_frame.shape[0]/2)+pixel_delta), (255, 0, 0), 1, 1)
-                      cv2.line(frame_visual_elements, (0,int(display_frame.shape[0]/2)-pixel_delta),(int(display_frame.shape[1]), int(display_frame.shape[0]/2)-pixel_delta), (255, 0, 0), 1, 1)
-                    # draw vertical lines
-                    for numb_v in range(numb_vertical):
-                      pixel_delta=int(numb_v*grid_spacing*self.pixelPROum)
-                      cv2.line(frame_visual_elements, (int(display_frame.shape[1]/2)+pixel_delta, 0),(int(display_frame.shape[1]/2)+pixel_delta, display_frame.shape[1]), (255, 0, 0), 1, 1)
-                      cv2.line(frame_visual_elements, (int(display_frame.shape[1]/2)-pixel_delta, 0),(int(display_frame.shape[1]/2)-pixel_delta, display_frame.shape[1]), (255, 0, 0), 1, 1)
-                    print("Grid executed")
+                crop_img = Grid_frame[int(y):int(y+self.img_height), int(x):int(x+self.img_width)]
+                frame_visual_elements = self.create_vision_element_overlay(frame_visual_elements,crop_img)
+                cv2.putText(img=frame_visual_elements,text="Grid: "+ str(grid_spacing) + "um", org=(5,30), fontFace=cv2.FONT_HERSHEY_SIMPLEX,fontScale=1,color=(255,0,0), thickness=1)
+                print("Grid executed")
 
             case "Draw_CS":
               active = function_parameter['active']
               if active:
                 # Does not work for alpha >90 yet
-                p_x_centerline=-1*int(round(math.tan(degrees_to_rads(self.camera_axis_1_angle))*round(display_frame.shape[0]/2)))
-                p_y_centerline=int(round(display_frame.shape[0]/2))
-                p1_x_v_centerline_tl, p1_y_v_centerline_tl = self.CS_Conv_Pixel_Center_TO_Top_Left(display_frame.shape[1],display_frame.shape[0],p_x_centerline,p_y_centerline)
-                p2_x_v_centerline_tl, p2_y_v_centerline_tl = self.CS_Conv_Pixel_Center_TO_Top_Left(display_frame.shape[1],display_frame.shape[0],-p_x_centerline,-p_y_centerline)
-                p0_x_center_tl, p0_y_center_tl =self.CS_Conv_Pixel_Center_TO_Top_Left(display_frame.shape[1],display_frame.shape[0],0,0)
-                if self.camera_axis_2_angle == '+':
-                  cv2.line(frame_visual_elements, (p0_x_center_tl, p0_y_center_tl),(p1_x_v_centerline_tl, p1_y_v_centerline_tl), (255, 0, 0), 3, 1)
+                CS_frame = np.zeros((received_frame.shape[0]+received_frame.shape[1], received_frame.shape[0]+received_frame.shape[1], 3), dtype = np.uint8)
+                if self.camera_axis_1 == 'z' or self.camera_axis_1 == 'Z':
+                  color_axis_1 = (255, 0, 0)
+                elif self.camera_axis_1 == 'y' or self.camera_axis_1 == 'Y':
+                  color_axis_1 = (0, 255, 0)
                 else:
-                  cv2.line(frame_visual_elements, (p0_x_center_tl, p0_y_center_tl),(p2_x_v_centerline_tl, p2_y_v_centerline_tl), (255, 0, 0), 3, 1)
-                cv2.line(frame_visual_elements, (p0_x_center_tl, p0_y_center_tl),(p1_x_h_centerline_tl, p1_y_h_centerline_tl), (255, 0, 0), 3, 1)
-                print("Draw_Cs executed!")
+                  color_axis_1 = (0, 0, 255)
 
-            case "Draw_Grid":
+                if self.camera_axis_2 == 'z' or self.camera_axis_2 == 'Z':
+                  color_axis_2 = (255, 0, 0)
+                elif self.camera_axis_2 == 'x' or self.camera_axis_2 == 'X':
+                  color_axis_2 = (0, 0, 255)
+                else:
+                  color_axis_2 = (0, 255, 0)
+
+                #draw axis_1
+                cv2.line(CS_frame, (int(CS_frame.shape[1]/2), int(CS_frame.shape[0]/2)),(CS_frame.shape[1], int(CS_frame.shape[0]/2)), color_axis_1, 2, 1)
+                #draw axis_2
+                if self.camera_axis_2_angle == '+':
+                  cv2.line(CS_frame, (int(CS_frame.shape[1]/2), int(CS_frame.shape[0]/2)),(int(CS_frame.shape[1]/2), 0), color_axis_2, 2, 1)
+                else:
+                  cv2.line(CS_frame, (int(CS_frame.shape[1]/2), int(CS_frame.shape[0]/2)),(int(CS_frame.shape[1]/2), CS_frame.shape[0]), color_axis_2 , 2, 1)
+                CS_frame= rotate_image(CS_frame,self.camera_axis_1_angle)
+                center = CS_frame.shape
+                x = center[1]/2 - self.img_width/2
+                y = center[0]/2 - self.img_height/2
+                crop_img = CS_frame[int(y):int(y+self.img_height), int(x):int(x+self.img_width)]
+                frame_visual_elements = self.create_vision_element_overlay(frame_visual_elements,crop_img)
+                print("Draw_CS executed!")
+
+            case "Draw_Grid_TO_BE_DELETED":
               active = function_parameter['active']
               grid_spacing = function_parameter['grid_spacing']
               
@@ -556,6 +697,7 @@ class ImagePublisher(Node):
                     else:
                       self.VisionOK=False
                       self.counter_error_cross_val += 1
+                      self.get_logger().error('No circle detected!')
                     print("Hough Circles executed")
                   except:
                     self.VisionOK=False
@@ -592,6 +734,7 @@ class ImagePublisher(Node):
       while(True):
         k=cv2.waitKey(1) & 0xFF
         self.run_crossvalidation()
+        time.sleep(1)
     except KeyboardInterrupt:
       pass
     

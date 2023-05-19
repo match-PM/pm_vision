@@ -3,5 +3,5 @@ camera_params:
   magnification: 1 
   camera_axis_1: 'x'
   camera_axis_2: 'y'
-  camera_axis_1_angle: 180
+  camera_axis_1_angle: 0
   camera_axis_2_angle: '+'

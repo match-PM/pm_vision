@@ -10,7 +10,14 @@
         },
         {
             "Draw_CS": {
-                "active": true
+                "active": false
+            }
+        },
+        {
+            "Blur": {
+                "active": true,
+                "kernelsize": 3,
+                "type": "GaussianBlur"
             }
         },
         {
@@ -46,20 +53,29 @@
         },
         {
             "Canny": {
-                "active": false,
+                "active": true,
                 "threshold1": 100,
                 "threshold2": 200,
                 "aperatureSize": 5,
                 "L2gradient": "nothing"
             }
         },
+
         {
             "ROI": {
-                "active": false,
-                "ROI_center_x": 0,
-                "ROI_center_y": 200,
+                "active": true,
+                "ROI_center_x": 200,
+                "ROI_center_y": 0,
                 "ROI_height": 360,
                 "ROI_width": 400
+            }
+        },
+        {
+            "HoughLinesP": {
+                "active": true,
+                "threshold": 10,
+                "minLineLength": 50,
+                "maxLineGap": 5
             }
         },
         {
@@ -74,7 +90,19 @@
         {
             "Morphology_Ex_Opening": {
                 "active": false,
-                "kernelsize": 11
+                "kernelsize": 5
+            }
+        },
+        {
+            "Morphology_Ex_Closing": {
+                "active": false,
+                "kernelsize": 3
+            }
+        },
+        {
+            "Morphology_Ex_Gradient": {
+                "active": false,
+                "kernelsize": 7
             }
         },
         {
@@ -100,22 +128,32 @@
                 "L2gradient": "nothing"
             }
         },
+
         {
             "HoughCircles": {
-                "active": true,
+                "active": false,
                 "draw_circles": true,
                 "method": "HOUGH_GRADIENT",
-                "dp": 500,
+                "dp": 50,
                 "minDist": 30,
                 "param1": 5,
                 "param2": 1,
-                "minRadius": 40,
-                "maxRadius": 200
+                "minRadius": 10,
+                "maxRadius": 600
             }
         },
         {
             "Errosion": {
-                "active": false
+                "active": false,
+                "kernelsize": 5,
+                "iterations":1
+            }
+        },
+        {
+            "Dilation": {
+                "active": false,
+                "kernelsize": 5,
+                "iterations": 1
             }
         }
     ]
