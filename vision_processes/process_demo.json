@@ -72,7 +72,7 @@
         },
         {
             "HoughLinesP": {
-                "active": true,
+                "active": false,
                 "threshold": 10,
                 "minLineLength": 50,
                 "maxLineGap": 5

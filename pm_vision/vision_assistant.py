@@ -19,6 +19,7 @@ from ament_index_python.packages import get_package_share_directory
 import math
 from math import pi
 import time
+from pathlib import Path
 
 def get_screen_resolution():
    output = subprocess.Popen('xrandr | grep "\*" | cut -d " " -f4', shell=True, stdout=subprocess.PIPE).communicate()[0]
@@ -62,10 +63,13 @@ class ImagePublisher(Node):
     Class constructor to set up the node
     """
     super().__init__('vision_assistant')
+    
+    #Declare Parameter with default values
     self.declare_parameter('launch_as_assistant', True)      # 'execute_process'
     self.declare_parameter('process_filename','process_demo.json')
     self.declare_parameter('camera_config_filename','webcam_config.yaml')
     self.declare_parameter('db_cross_val_only', False)
+    self.declare_parameter('process_UID','no_id_given')
     
     self.vision_filename = self.get_parameter('process_filename').value
 
@@ -106,10 +110,11 @@ class ImagePublisher(Node):
     else:
       self.subscription = self.create_subscription(
         Image, 
-        'video_frames', 
+        self.camera_subscription_topic,   #defined in camera_config.yaml
         self.Vision_callback, 
         10)
       self.subscription # prevent unused variable warning  
+      self.get_logger().info('Subscribing to: ' + self.camera_subscription_topic)
     
   def load_path_config(self):
       try:
@@ -153,6 +158,7 @@ class ImagePublisher(Node):
       self.camera_axis_2=config["camera_axis_2"]
       self.camera_axis_1_angle=config["camera_axis_1_angle"]
       self.camera_axis_2_angle=config["camera_axis_2_angle"]
+      self.camera_subscription_topic = config["subscription_topic"]
       # Calculate Camera parameter
       self.pixelPROum=self.magnification/self.pixelsize
       self.umPROpixel=self.pixelsize/self.magnification
@@ -182,6 +188,27 @@ class ImagePublisher(Node):
       self.get_logger().info('Process pipeline loaded!')
     except:
       self.get_logger().error('Error opening process file: ' + str(self.process_file_path)+ "!")
+  
+  def save_vision_results(self, result_dict):
+    result_meta_dict={}
+    vision_results_path = self.process_library_path + '/' + Path(self.process_file_path).stem + '_results.json' 
+    result_meta_dict['process_name'] = self.get_parameter('process_filename').value
+    result_meta_dict['exec_timestamp'] = str(datetime.now().strftime("%d_%m_%Y_%H_%M_%S"))
+    result_meta_dict['vision_OK'] = self.VisionOK
+    result_meta_dict['process_UID'] = self.get_parameter('process_UID').value
+
+    if self.cross_val_running:
+      result_meta_dict['image_name'] = str(self.crossval_image_name)
+      result_meta_dict['vision_crossval_OK'] = self.VisionOK_cross_val
+
+    #Insert metadata at the beginning of the dictionary
+    result_dict={**result_meta_dict,**result_dict}
+
+    try:
+      with open(vision_results_path,"w") as outputfile:
+        json.dump(result_dict, outputfile)
+    except:
+      self.get_logger().error('Error saving vision results!')
 
   def create_vision_element_overlay(self,displ_frame,vis_elem_frame):
     #Add visual elements to the display frame
@@ -273,6 +300,7 @@ class ImagePublisher(Node):
     display_frame=received_frame
     frame_buffer.append(received_frame)
     self.VisionOK = True
+    vision_results={"test":"this is a test"}
     try:
       pipeline_list=_process_pipeline_list
       for list_item in pipeline_list:
@@ -404,7 +432,7 @@ class ImagePublisher(Node):
                   self.VisionOK=False
                   self.counter_error_cross_val += 1
                   self.get_logger().error('No Line detected!')
-              print("HoughLinesP executed")
+                print("HoughLinesP executed")
 
             case "select_Area":
               active = function_parameter['active']
@@ -717,6 +745,8 @@ class ImagePublisher(Node):
     else:
       cv2.rectangle(frame_visual_elements,(0,0),(frame_visual_elements.shape[1],frame_visual_elements.shape[0]),(0,255,0),3)
     
+    self.save_vision_results(vision_results)
+
     display_frame=self.create_vision_element_overlay(display_frame,frame_visual_elements)
 
     if len(received_frame.shape)<3:
@@ -726,7 +756,7 @@ class ImagePublisher(Node):
       display_frame = cv2.vconcat([received_frame,display_frame])
 
     display_frame=image_resize(display_frame, height = (self.screen_height-100))
-
+    
     return display_frame
   
   def cycle_though_db(self):
@@ -756,6 +786,7 @@ class ImagePublisher(Node):
           print("Processing image: " + image_in_folder)
           # Calculate VisionOK on image
           self.load_process_file()
+          self.crossval_image_name = image_in_folder
           display_image = self.process_image(image,self.process_pipeline_list)
 
           if not self.VisionOK:
