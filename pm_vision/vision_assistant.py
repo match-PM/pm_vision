@@ -54,7 +54,7 @@ def image_resize(image, width=None, height = None, inter = cv2.INTER_AREA):
   return resized
 
 
-class ImagePublisher(Node):
+class Vision_Assistant(Node):
   """
   Create an ImagePublisher class, which is a subclass of the Node class.
   """
@@ -79,7 +79,8 @@ class ImagePublisher(Node):
 
     #self.publisher_ = self.create_publisher(Image, 'video_frames', 10)
     # Create image subscriber
-    if self.get_parameter('launch_as_assistant').value:
+    self.launch_as_assistant = self.get_parameter('launch_as_assistant').value
+    if self.launch_as_assistant:
       self.get_logger().info('Starting node in assistant mode!')
     else:
       self.get_logger().info('Starting node in processing mode!')
@@ -192,10 +193,11 @@ class ImagePublisher(Node):
   def save_vision_results(self, result_dict):
     result_meta_dict={}
     vision_results_path = self.process_library_path + '/' + Path(self.process_file_path).stem + '_results.json' 
-    result_meta_dict['process_name'] = self.get_parameter('process_filename').value
+    result_meta_dict['vision_process_name'] = self.get_parameter('process_filename').value
     result_meta_dict['exec_timestamp'] = str(datetime.now().strftime("%d_%m_%Y_%H_%M_%S"))
     result_meta_dict['vision_OK'] = self.VisionOK
     result_meta_dict['process_UID'] = self.get_parameter('process_UID').value
+    result_meta_dict['VisionOK_cross_val'] = self.VisionOK_cross_val
 
     if self.cross_val_running:
       result_meta_dict['image_name'] = str(self.crossval_image_name)
@@ -300,7 +302,8 @@ class ImagePublisher(Node):
     display_frame=received_frame
     frame_buffer.append(received_frame)
     self.VisionOK = True
-    vision_results={"test":"this is a test"}
+    vision_results_file_dict={}
+    vision_results_list=[]
     try:
       pipeline_list=_process_pipeline_list
       for list_item in pipeline_list:
@@ -706,22 +709,30 @@ class ImagePublisher(Node):
                       print("Cirlces Detected")
                       # Convert the circle parameters a, b and r to integers.
                       detected_circles = np.uint16(np.around(detected_circles))
-                      if draw_circles:
-                        for pt in detected_circles[0, :]:
-                          x, y, r = pt[0], pt[1], pt[2]
+                      HoughCircles_reslults_list=[]
+                      for pt in detected_circles[0, :]:
+                        x, y, r = pt[0], pt[1], pt[2]
 
-                          x_cs_camera, y_cs_camera = self.CS_CV_TO_camera_with_ROI(x,y)
+                        x_cs_camera, y_cs_camera = self.CS_CV_TO_camera_with_ROI(x,y)
+                        radius_um=r*self.umPROpixel
+                        print(str(self.camera_axis_1)+'-Coordinate: '+ str(x_cs_camera))
+                        print(str(self.camera_axis_2)+'-Coordinate: '+ str(y_cs_camera))
+                        print('Radius: '+ str(radius_um))
+                        HoughCircles_reslults_list.append({
+                          str(self.camera_axis_1)+'-Coordinate: ': x_cs_camera,
+                          str(self.camera_axis_2)+'-Coordinate: ': y_cs_camera,
+                          "radius":radius_um
+                        })
+
+                        if draw_circles:
                           x_tl,y_tl = self.CS_Conv_ROI_Pix_TO_Img_Pix(x,y)
-
-                          radius_um=r*self.umPROpixel
-                          print(str(self.camera_axis_1)+'-Coordinate: '+ str(x_cs_camera))
-                          print(str(self.camera_axis_2)+'-Coordinate: '+ str(y_cs_camera))
-                          print('Radius: '+ str(radius_um))
-                          # Conv to RGB to add Circles to display
                           # Draw the circumference of the circle.
                           cv2.circle(frame_visual_elements, (x_tl, y_tl), r, (0, 255, 0), 2)
                           # Draw a small circle (of radius 1) to show the center.
                           cv2.circle(frame_visual_elements, (x_tl, y_tl), 1, (0, 0, 255), 2)
+                      HouchCircles_results_dict={"Circles": HoughCircles_reslults_list}
+                      vision_results_list.append(HouchCircles_results_dict)
+
                     else:
                       self.VisionOK=False
                       self.counter_error_cross_val += 1
@@ -745,7 +756,10 @@ class ImagePublisher(Node):
     else:
       cv2.rectangle(frame_visual_elements,(0,0),(frame_visual_elements.shape[1],frame_visual_elements.shape[0]),(0,255,0),3)
     
-    self.save_vision_results(vision_results)
+    # Add the vision_results_list to the vision_results_file
+    vision_results_file_dict["vision_results"] = vision_results_list
+    # Save the vision_results_file
+    self.save_vision_results(vision_results_file_dict)
 
     display_frame=self.create_vision_element_overlay(display_frame,frame_visual_elements)
 
@@ -758,6 +772,11 @@ class ImagePublisher(Node):
     display_frame=image_resize(display_frame, height = (self.screen_height-100))
     
     return display_frame
+  
+
+
+
+  
   
   def cycle_though_db(self):
     try:
@@ -824,7 +843,7 @@ class ImagePublisher(Node):
     # Show image
     cv2.imshow("PM Vision Assistant", display_image)
     
-    if (self.get_parameter('launch_as_assistant').value):
+    if (self.launch_as_assistant):
       cv2.waitKey(1)
     else:
       cv2.waitKey(self.image_display_time_in_execution_mode)
@@ -834,7 +853,6 @@ class ImagePublisher(Node):
        
     if not (self.get_parameter('launch_as_assistant').value):
       self.get_logger().info('Vision Process Ended!')
-      self.destroy_node()
 
 def main(args=None):
   
@@ -842,12 +860,17 @@ def main(args=None):
   rclpy.init(args=args)
   
   # Create the node
-  image_publisher = ImagePublisher()
+  vision_assistant = Vision_Assistant()
   
   # Spin the node so the callback function is called.
-  rclpy.spin(image_publisher)
+  if vision_assistant.launch_as_assistant:
+    # Run vision callback function continiously
+    rclpy.spin(vision_assistant)
+  else:
+    # Run vision callback function only once
+    rclpy.spin_once(vision_assistant)
   
-  image_publisher.destroy_node()
+  vision_assistant.destroy_node()
   
   # Shutdown the ROS client library for Python
   rclpy.shutdown()

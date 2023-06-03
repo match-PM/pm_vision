@@ -61,14 +61,14 @@ ros2 run pm_vision vision_webcam_publisher
 ros2 run pm_vision vision_assistant --ros-args -p process_filename:=PROCESS_FILENAME.json
 
 ```
-### Remap the node to subscribe to a different image topic
+### Remap the node to subscribe to a different image topic; the topic can also be defined in the camera.yaml file and does not need to be changed
 ```
 ros2 run pm_vision vision_assistant --ros-args -r video_frames:=/Cam1/image_raw
 
 ```
 ### Remap the node to start in process mode (by default starts in assistant mode)
 ```
-ros2 run pm_vision vision_assistant --ros-args -r launch_as_assistant:=False
+ros2 run pm_vision vision_assistant --ros-args -p launch_as_assistant:=False
 
 ```
 ### Remap the node to start with a different camera config file

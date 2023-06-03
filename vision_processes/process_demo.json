@@ -15,7 +15,7 @@
         },
         {
             "Blur": {
-                "active": true,
+                "active": false,
                 "kernelsize": 3,
                 "type": "GaussianBlur"
             }
@@ -53,7 +53,7 @@
         },
         {
             "Canny": {
-                "active": true,
+                "active": false,
                 "threshold1": 100,
                 "threshold2": 200,
                 "aperatureSize": 5,
@@ -63,7 +63,7 @@
 
         {
             "ROI": {
-                "active": true,
+                "active": false,
                 "ROI_center_x": 200,
                 "ROI_center_y": 0,
                 "ROI_height": 360,
@@ -131,7 +131,7 @@
 
         {
             "HoughCircles": {
-                "active": false,
+                "active": true,
                 "draw_circles": true,
                 "method": "HOUGH_GRADIENT",
                 "dp": 50,
