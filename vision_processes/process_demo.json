@@ -60,7 +60,6 @@
                 "L2gradient": "nothing"
             }
         },
-
         {
             "ROI": {
                 "active": false,
@@ -72,10 +71,22 @@
         },
         {
             "HoughLinesP": {
-                "active": false,
+                "active": true,
                 "threshold": 10,
                 "minLineLength": 50,
                 "maxLineGap": 5
+            }
+        },
+        {
+            "Horizontal": {
+                "active": false,
+                "h_kernelsize": 100
+            }
+        },
+        {
+            "Vertical": {
+                "active": false,
+                "v_kernelsize": 100
             }
         },
         {
@@ -128,10 +139,9 @@
                 "L2gradient": "nothing"
             }
         },
-
         {
             "HoughCircles": {
-                "active": true,
+                "active": false,
                 "draw_circles": true,
                 "method": "HOUGH_GRADIENT",
                 "dp": 50,
@@ -146,7 +156,7 @@
             "Errosion": {
                 "active": false,
                 "kernelsize": 5,
-                "iterations":1
+                "iterations": 1
             }
         },
         {

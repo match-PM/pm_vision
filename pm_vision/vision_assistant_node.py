@@ -70,6 +70,7 @@ class Vision_Assistant(Node):
     self.declare_parameter('camera_config_filename','webcam_config.yaml')
     self.declare_parameter('db_cross_val_only', False)
     self.declare_parameter('process_UID','no_id_given')
+    self.declare_parameter('open_process_file', False)
     
     self.vision_filename = self.get_parameter('process_filename').value
 
@@ -101,6 +102,9 @@ class Vision_Assistant(Node):
     self.load_assistant_config()
     self.load_process_file_metadata()
     self.load_camera_config()
+
+    if self.get_parameter('open_process_file').value:
+      self.open_process_file_in_vcode()
 
     self.counter_error_cross_val=0
     self.VisionOK_cross_val=True
@@ -147,6 +151,14 @@ class Vision_Assistant(Node):
       self.get_logger().info('Vision assistant config loaded!')
     except:
       self.get_logger().error('Error opening vision assistant configuration: ' + str(self.vision_assistant_config)+ "!")
+  
+  def open_process_file_in_vcode(self):
+      try:
+          Comand = 'code ' + self.process_file_path
+          os.system(Comand)
+      except Exception as e:
+          print(e)
+          print("Process File could not be opened")
 
   def load_camera_config(self):
     try:
@@ -423,14 +435,39 @@ class Vision_Assistant(Node):
               maxLineGap = function_parameter['maxLineGap']
               
               if active:
+                HoughLinesP_results_list=[]
+                #print(type(HoughLinesP_results_list))
                 lines = cv2.HoughLinesP(frame_processed,rho = 1,theta = 1*np.pi/180,threshold = threshold,minLineLength = minLineLength,maxLineGap = maxLineGap)
                 if lines is not None:
                   for x1,y1,x2,y2 in lines[0]:
-                    print(x1)
-                    print(y1)
                     x1,y1 = self.CS_Conv_ROI_Pix_TO_Img_Pix(x1,y1)
                     x2,y2 = self.CS_Conv_ROI_Pix_TO_Img_Pix(x2,y2)
                     cv2.line(frame_visual_elements,(x1,y1),(x2,y2),(0,255,0),2)
+
+                    x1_cs_camera, y1_cs_camera = self.CS_CV_TO_camera_with_ROI(x1,y1)
+                    x2_cs_camera, y2_cs_camera = self.CS_CV_TO_camera_with_ROI(x2,y2)
+
+                    print('Point 1 - ' + str(self.camera_axis_1)+'-Coordinate:'+ str(x1_cs_camera))
+                    print('Point 1 - ' + str(self.camera_axis_2)+'-Coordinate:'+ str(y1_cs_camera))
+                    print('Point 2 - ' + str(self.camera_axis_1)+'-Coordinate:'+ str(x2_cs_camera))
+                    print('Point 2 - ' + str(self.camera_axis_2)+'-Coordinate:'+ str(y2_cs_camera))
+
+                    HoughLinesP_results_list.append({
+                      'Point_1': [{'axis_1': x1_cs_camera},{"axis_2":y2_cs_camera}],
+                      'Point_2': [{'axis_1': x2_cs_camera},{"axis_2":y2_cs_camera}],
+                      'axis_1_suffix': self.camera_axis_1,
+                      'axis_2_suffix': self.camera_axis_2,
+                      'angle': "to be added",
+                      'length': "to be added",
+                      "Unit": "um",
+                      "angle_unit": "degree"
+                      })
+
+                  #print(HoughLinesP_results_list)
+                  HoughLinesP_results_dict={"Lines": HoughLinesP_results_list}
+                  vision_results_list.append(HoughLinesP_results_dict)
+                  print(vision_results_list)
+                    
                 else:
                   self.VisionOK=False
                   self.counter_error_cross_val += 1
@@ -489,6 +526,32 @@ class Vision_Assistant(Node):
                 display_frame=self.adaptImagewithROI(display_frame,frame_processed)
                 frame_buffer.append(frame_processed)
                 print("Morphology_Ex_Closing executed")
+            
+            case "Horizontal":
+              active = function_parameter['active']
+              h_kernelsize = function_parameter['h_kernelsize']
+  
+              if active:
+                horizontal_size = received_frame.shape[1] // h_kernelsize
+                horizontalStructure = cv2.getStructuringElement(cv2.MORPH_RECT, (horizontal_size, 1))
+                frame_processed = cv2.erode(frame_processed, horizontalStructure)
+                frame_processed = cv2.dilate(frame_processed, horizontalStructure)
+                display_frame=self.adaptImagewithROI(display_frame,frame_processed)
+                frame_buffer.append(frame_processed)
+                print("Horizontal executed")
+
+            case "Vertical":
+              active = function_parameter['active']
+              v_kernelsize = function_parameter['v_kernelsize']
+  
+              if active:
+                vertical_size = received_frame.shape[0] // v_kernelsize
+                verticalStructure = cv2.getStructuringElement(cv2.MORPH_RECT, (1, vertical_size))
+                frame_processed = cv2.erode(frame_processed, verticalStructure)
+                frame_processed = cv2.dilate(frame_processed, verticalStructure)
+                display_frame=self.adaptImagewithROI(display_frame,frame_processed)
+                frame_buffer.append(frame_processed)
+                print("Horizontal executed")
 
             case "Blur":
               active = function_parameter['active']
@@ -715,14 +778,17 @@ class Vision_Assistant(Node):
 
                         x_cs_camera, y_cs_camera = self.CS_CV_TO_camera_with_ROI(x,y)
                         radius_um=r*self.umPROpixel
-                        print(str(self.camera_axis_1)+'-Coordinate: '+ str(x_cs_camera))
-                        print(str(self.camera_axis_2)+'-Coordinate: '+ str(y_cs_camera))
+                        print(str(self.camera_axis_1)+'-Coordinate:'+ str(x_cs_camera))
+                        print(str(self.camera_axis_2)+'-Coordinate:'+ str(y_cs_camera))
                         print('Radius: '+ str(radius_um))
                         HoughCircles_reslults_list.append({
-                          str(self.camera_axis_1)+'-Coordinate: ': x_cs_camera,
-                          str(self.camera_axis_2)+'-Coordinate: ': y_cs_camera,
-                          "radius":radius_um
-                        })
+                          'axis_1': x_cs_camera,
+                          'axis_2': y_cs_camera,
+                          'axis_1_suffix': self.camera_axis_1,
+                          'axis_2_suffix': self.camera_axis_2,
+                          "radius":radius_um,
+                          "Unit": "um"
+                          })
 
                         if draw_circles:
                           x_tl,y_tl = self.CS_Conv_ROI_Pix_TO_Img_Pix(x,y)
@@ -732,7 +798,6 @@ class Vision_Assistant(Node):
                           cv2.circle(frame_visual_elements, (x_tl, y_tl), 1, (0, 0, 255), 2)
                       HouchCircles_results_dict={"Circles": HoughCircles_reslults_list}
                       vision_results_list.append(HouchCircles_results_dict)
-
                     else:
                       self.VisionOK=False
                       self.counter_error_cross_val += 1

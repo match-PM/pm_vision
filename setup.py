@@ -25,7 +25,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'vision_assistant = pm_vision.vision_assistant:main',
+            'vision_assistant = pm_vision.vision_assistant_node:main',
             'vision_subscriber = pm_vision.vision_sub:main',
             'vision_webcam_publisher = pm_vision.webcam_image_pub:main',
         ],

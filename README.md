@@ -24,7 +24,7 @@ Currently the assistant is designed for camera setups with telecentric lenses on
 * Start by changing directory to your workspace!
 * Clone package
 ```
-git clone https://github.com/match-PM/match_vision.git
+git clone https://github.com/match-PM/pm_vision.git
 ```
 * Go into pm_vision/config/vision_assistant_path_config.yaml and change:
 ```
@@ -99,5 +99,8 @@ Tutorials for working with the assistant will be given here...
 
 ## 5. External documentation
 [ROS 2 - Humble - Documentation and Tutorial](https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debians.html)
+
+VS CODE gnome-terminal Issue
+unset GTK_PATH
 
 
