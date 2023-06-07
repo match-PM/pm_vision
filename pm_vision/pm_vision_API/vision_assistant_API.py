@@ -8,6 +8,7 @@ import yaml
 from yaml.loader import SafeLoader
 import os
 import time
+import geometry_utils as Geometry 
 
 class vision_assistant_API:
     def __init__(self):
@@ -85,15 +86,25 @@ class vision_assistant_API:
     def get_circles_from_vision_results(self):
         try:
             self.check_if_results_list_empthy() # This function will raise an exeption when results list is empty
+            list_of_circle_obj=[]
             for result in self.vision_results_list:
                 if "Circles" in result:
                     list_of_circles=result.get('Circles')
-                    return list_of_circles
-                    #for circle in list_of_circles:
-                        #print(type(circle))
-                        #print(circle)    
+                    #return list_of_circles
+                    for circle in list_of_circles:
+                        current_circle=Geometry.circle(  ax1=circle['axis_1'],
+                                                ax2=circle['axis_2'],
+                                                radius=circle['radius'],
+                                                ax1_suffix=circle['axis_1_suffix'],
+                                                ax2_suffix=circle['axis_2_suffix'],
+                                                unit=circle['Unit'])
+                        list_of_circle_obj.append(current_circle)
+                    
+            if len(list_of_circle_obj) == 0:    
                 print("No Circles in results found!")
                 return False
+            else:
+                return list_of_circle_obj
         except:
             print("WARNING: Vision results list is empty!")      
 
