@@ -100,6 +100,7 @@ class Vision_Assistant(Node):
 
     self.load_path_config()
     self.load_assistant_config()
+    self.check_process_file_existence()
     self.load_process_file_metadata()
     self.load_camera_config()
 
@@ -179,6 +180,39 @@ class Vision_Assistant(Node):
       self.get_logger().info('Camera config loaded!')
     except:
       self.get_logger().error('Error opening camera config file: ' + str(self.camera_config_path+self.get_parameter('camera_config_filename').value)+ "!")
+
+  def check_process_file_existence(self):
+    if os.path.exists(self.process_file_path) == False:
+      self.get_logger().warning("Given Process File does not exist!")
+      if self.launch_as_assistant:
+        print(f"Should {self.process_file_path} be created?")
+        print("Enter y/n to continue")
+        while True:
+            a = input()
+            if a=="y":
+              self.create_process_file()
+              break
+            elif a=="n":
+              print("Process File will not be created!") 
+              break
+            elif a=="exit":
+              print("Process File will not be created!") 
+              break
+            else:
+              print("Enter either yes/no")
+                  
+  def create_process_file(self):
+    try:
+      default_process_file_metadata_dict={}
+      default_process_file_metadata_dict['vision_process_name'] = self.get_parameter('process_filename').value
+      default_process_file_metadata_dict['id_process'] = 'default_ID'
+      default_process_file_metadata_dict['File_created'] = str(datetime.now().strftime("%d_%m_%Y_%H_%M_%S"))
+      default_process_file_metadata_dict['vision_pipeline'] = []
+      with open(self.process_file_path,"w+") as outputfile:
+        json.dump(default_process_file_metadata_dict, outputfile)
+    except Exception as e:
+      print(e)
+      self.get_logger().error("Error creating process file")
 
   def load_process_file_metadata(self):
     try:
@@ -453,8 +487,8 @@ class Vision_Assistant(Node):
                     print('Point 2 - ' + str(self.camera_axis_2)+'-Coordinate:'+ str(y2_cs_camera))
 
                     HoughLinesP_results_list.append({
-                      'Point_1': [{'axis_1': x1_cs_camera},{"axis_2":y2_cs_camera}],
-                      'Point_2': [{'axis_1': x2_cs_camera},{"axis_2":y2_cs_camera}],
+                      'Point_1': {'axis_1': x1_cs_camera,"axis_2":y2_cs_camera},
+                      'Point_2': {'axis_1': x2_cs_camera,"axis_2":y2_cs_camera},
                       'axis_1_suffix': self.camera_axis_1,
                       'axis_2_suffix': self.camera_axis_2,
                       'angle': "to be added",

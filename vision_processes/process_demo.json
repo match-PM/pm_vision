@@ -71,7 +71,7 @@
         },
         {
             "HoughLinesP": {
-                "active": false,
+                "active": true,
                 "threshold": 10,
                 "minLineLength": 50,
                 "maxLineGap": 5
@@ -141,7 +141,7 @@
         },
         {
             "HoughCircles": {
-                "active": true,
+                "active": false,
                 "draw_circles": true,
                 "method": "HOUGH_GRADIENT",
                 "dp": 50,

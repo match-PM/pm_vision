@@ -92,7 +92,7 @@ class vision_assistant_API:
                     list_of_circles=result.get('Circles')
                     #return list_of_circles
                     for circle in list_of_circles:
-                        current_circle=Geometry.circle(  ax1=circle['axis_1'],
+                        current_circle=Geometry.Circle(  ax1=circle['axis_1'],
                                                 ax2=circle['axis_2'],
                                                 radius=circle['radius'],
                                                 ax1_suffix=circle['axis_1_suffix'],
@@ -115,24 +115,53 @@ class vision_assistant_API:
             for result in self.vision_results_list:
                 if "Circle" in result:
                     circle=result.get('Circle')
+                    circle=Geometry.Circle(ax1=circle['axis_1'],
+                        ax2=circle['axis_2'],
+                        radius=circle['radius'],
+                        ax1_suffix=circle['axis_1_suffix'],
+                        ax2_suffix=circle['axis_2_suffix'],
+                        unit=circle['Unit'])
                     return circle
-                print("No Circle in results found!")
-                return False
+            # if for-loop runs through no circle has been found
+            print("No Circle in results found!")
+            return False
         except:
             print("WARNING: Vision results list is empty!")  
 
+
     def get_lines_from_vision_results(self):
-        # not tested!!!
         try:
             self.check_if_results_list_empthy() # This function will raise an exeption when results list is empty
+            list_of_line_obj=[]
             for result in self.vision_results_list:
                 if "Lines" in result:
                     list_of_lines=result.get('Lines')
-                    return list_of_lines
+                    for line in list_of_lines:
+                        current_point_1=Geometry.Point(ax1=line['Point_1']['axis_1'],
+                                                       ax2=line['Point_1']['axis_2'],
+                                                       ax1_suffix=line['axis_1_suffix'],
+                                                       ax2_suffix=line['axis_2_suffix'],
+                                                       unit=line['Unit']
+                                                       )
+                        current_point_2=Geometry.Point( ax1=line['Point_2']['axis_1'],
+                                                        ax2=line['Point_2']['axis_2'],
+                                                        ax1_suffix=line['axis_1_suffix'],
+                                                        ax2_suffix=line['axis_2_suffix'],
+                                                        unit=line['Unit']
+                                                        )                      
+                        current_line=Geometry.Line(current_point_1,
+                                                   current_point_2,
+                                                   unit=line['Unit']
+                                                    )
+                        list_of_line_obj.append(current_line)
+                    
+            if len(list_of_line_obj) == 0:    
                 print("No Lines in results found!")
                 return False
+            else:
+                return list_of_line_obj
         except:
-            print("WARNING: Vision results list is empty!")  
+            print("WARNING: Vision results list is empty!")
 
     def get_line_from_vision_results(self):
         # not tested!!!
