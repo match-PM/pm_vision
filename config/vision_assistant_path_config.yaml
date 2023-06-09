@@ -2,5 +2,5 @@ vision_assistant_path_config:
   process_library_path: "/home/mll/ros2_ws/src/pm_vision/vision_processes/"
   vision_database_path: "/home/mll/ros2_ws/src/pm_vision/vision_db/"
   camera_config_path: "/home/mll/ros2_ws/src/pm_vision/config/"
-  vision_assistant_config: "/home/mll/ros2_ws/src/pm_vision/config/vision_assistant_config.yaml"
+  vision_assistant_config: "/home/mll/ros2_ws/src/pm_vision/config/vision_assistant_config_test.yaml"
 
