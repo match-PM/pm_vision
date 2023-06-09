@@ -463,13 +463,49 @@ class Vision_Assistant(Node):
                   if draw_contours:
                     cv2.drawContours(frame_visual_elements, contours, -1, (0,255,75), 2)
                   print("findContours executed")
+            case "minEnclosingCircle":
+              active = function_parameter['active']
+              draw_circles = function_parameter['draw_circles']
+              mode = function_parameter['mode']
+              method = function_parameter['method']
+              if active:
+                try:
+                  contours,hierarchy = cv2.findContours(frame_processed, cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+                  print("Number of contours detected:", len(contours))
+                  # select the first contour
+                  cnt = contours[0]
+                  (x_tl_roi, y_tl_roi),radius = cv2.minEnclosingCircle(cnt)
+                  x_cs_camera, y_cs_camera = self.CS_CV_TO_camera_with_ROI(int(round(x_tl_roi)),int(round(y_tl_roi)))
+                  radius_um=radius*self.umPROpixel
+                  print(str(self.camera_axis_1)+'-Coordinate:'+ str(x_cs_camera))
+                  print(str(self.camera_axis_2)+'-Coordinate:'+ str(y_cs_camera))
+                  print('Radius: '+ str(radius_um))
+                  Circle_result_dict={"Circle":{
+                    'axis_1': x_cs_camera,
+                    'axis_2': y_cs_camera,
+                    'axis_1_suffix': self.camera_axis_1,
+                    'axis_2_suffix': self.camera_axis_2,
+                    "radius":radius_um,
+                    "Unit": "um"
+                    }}
+                  if draw_circles:
+                    x_tl,y_tl = self.CS_Conv_ROI_Pix_TO_Img_Pix(int(round(x_tl_roi)),int(round(y_tl_roi)))
+                    # Draw the circumference of the circle.
 
+                    cv2.circle(frame_visual_elements, (x_tl, y_tl), int(round(radius)), (0, 255, 0), 2)
+                    # Draw a small circle (of radius 1) to show the center.
+                    cv2.circle(frame_visual_elements, (x_tl, y_tl), 1, (0, 0, 255), 2)
+                  vision_results_list.append(Circle_result_dict)
+                  print("minEnclosingCircle executed")
+                except:
+                  self.VisionOK=False
+                  self.get_logger().error('Min Enclosing Circle detection failed! Image may not be grayscale!')
+            
             case "HoughLinesP":
               active = function_parameter['active']
               threshold = function_parameter['threshold']
               minLineLength = function_parameter['minLineLength']
-              maxLineGap = function_parameter['maxLineGap']
-              
+              maxLineGap = function_parameter['maxLineGap']              
               if active:
                 HoughLinesP_results_list=[]
                 #print(type(HoughLinesP_results_list))
@@ -659,7 +695,7 @@ class Vision_Assistant(Node):
 
                   if not os.path.isfile(image_name) and (not self.cross_val_running or save_in_cross_val):
                     if with_vision_elements:
-                      display_frame=self.adaptImagewithROI(display_frame,frame_processed)
+                      display_frame = self.adaptImagewithROI(display_frame,frame_processed)
                       image_to_save = self.create_vision_element_overlay(display_frame,frame_visual_elements)
                     else:
                         image_to_save = frame_processed
@@ -845,11 +881,9 @@ class Vision_Assistant(Node):
 
       if self.VisionOK:
         self.get_logger().info('Vision process executed cleanly!')
-        #print(len(frame_buffer))
       else:
         self.get_logger().error('Vision process executed with error!')
     except:
-        #print("Json Loading Error")
         self.get_logger().error("Fatal Error in vision function! Contact maintainer!")
     
     if not self.VisionOK:

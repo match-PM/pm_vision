@@ -153,6 +153,14 @@
             }
         },
         {
+            "minEnclosingCircle": {
+                "active": true,
+                "draw_circles": true,
+                "mode": "RETR_EXTERNAL",
+                "method": "CHAIN_APPROX_SIMPLE"
+            }
+        },
+        {
             "Errosion": {
                 "active": false,
                 "kernelsize": 5,
