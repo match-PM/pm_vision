@@ -71,7 +71,7 @@
         },
         {
             "HoughLinesP": {
-                "active": true,
+                "active": false,
                 "threshold": 10,
                 "minLineLength": 50,
                 "maxLineGap": 5
@@ -101,7 +101,7 @@
         {
             "Morphology_Ex_Opening": {
                 "active": false,
-                "kernelsize": 5
+                "kernelsize": 13
             }
         },
         {
@@ -141,7 +141,7 @@
         },
         {
             "HoughCircles": {
-                "active": false,
+                "active": true,
                 "draw_circles": true,
                 "method": "HOUGH_GRADIENT",
                 "dp": 50,

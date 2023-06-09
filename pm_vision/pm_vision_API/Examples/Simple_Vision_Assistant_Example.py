@@ -1,7 +1,6 @@
 from pathlib import Path
 import os
 import sys
-from typing import List
 
 #Import from absolute path
 #sys.path.append('/home/niklas/ros2_ws/src/pm_vision/pm_vision/pm_vision_API')

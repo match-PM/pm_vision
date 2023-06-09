@@ -1,10 +1,10 @@
 # PM Vision Assistant
 ROS2 Vision-Assistant to intuitivly build reusable vision-pipelines based on openCV functions.
 ## 1. Description
-The pm vision assistant is designed to intuitivly build reusable vision-pipelines based on openCV functions. It's basic idea is that the vision assistant node runs different vision functions (mostly based on openCV) successively to extract specific features from an image. Running the node in assistant mode will show you the processed (and the original) image you subscribed to while you can modify the vision pipeline in the processfile.json on the fly. It also has an feature  to crossvalidate images from a data base with the loaded vision_process.json. 
+The pm vision assistant is designed to intuitivly build reusable vision-pipelines based on openCV functions. It's basic idea is that the vision assistant node runs different vision functions (mostly based on openCV) defined in an processfile.json successively to extract specific features from an image. Running the node in assistant mode will show you the processed (and the original) image you subscribed to while you can modify the vision pipeline in the processfile.json on the fly. It also has an feature to crossvalidate images from a data base with the loaded vision_process.json. 
 
 There are some important config files to operate the vision assistant:
-* `vision_assistant_path_config.yaml`: This file specifies where to find the config, vision processes, camera configurations and the data base. The path configuration file is transfered to '/home/USER/ros2_ws/install/pm_vision/share' when building the package. 
+* `vision_assistant_path_config.yaml`: This file specifies where to find the config, vision processes, camera configurations and the image data base. The path configuration file is transfered to '/home/USER/ros2_ws/install/pm_vision/share' when building the package. 
 
 * `vision_assistant_config.yaml`: This config file configures how the vision assistant will operate (parameters can be changed while the node is runing). In order to change the behavoir of the assistant during runtime that file can be changed.
 
@@ -39,7 +39,7 @@ camera_config_path
 ```
 vision_assistant_config
 ```
-The pathes you insert in this config file specify where the vision assitant looks for the assistant configuration, processes and camera configs and where to save images. You can specify any path here. Make sure the assistant finds the respective files in that locations. The vision_assistant_path_config.yaml should not be removed!
+The pathes you insert in this config file specify where the vision assitant looks for the assistant configuration, processes and camera configs and where to save images. You can specify any path here. Make sure the assistant finds the respective files in that locations. The vision_assistant_path_config.yaml should not be removed! The File is added to .gitignore to prevent file changes when pulling from origin.
 * Build your workspace:
 ```
 colcon build 
@@ -52,11 +52,11 @@ If you leave (modify accordingly) the default file pathes in the '/config/vision
 ```
 ros2 run pm_vision vision_assistant
 ```
-### Start the webcam publisher (a webcam needs to be connected)
+### Start the webcam publisher (a webcam needs to be connected) to publish topic 'video_frames'
 ```
 ros2 run pm_vision vision_webcam_publisher
 ```
-### Remap the node to start with a different process file (file must be in the process library)
+### Remap the node to start with a different process file 
 ```
 ros2 run pm_vision vision_assistant --ros-args -p process_filename:=PROCESS_FILENAME.json
 
@@ -66,9 +66,9 @@ ros2 run pm_vision vision_assistant --ros-args -p process_filename:=PROCESS_FILE
 ros2 run pm_vision vision_assistant --ros-args -r video_frames:=/Cam1/image_raw
 
 ```
-### Remap the node to start in process mode (by default starts in assistant mode)
+### Remap the node to start in process mode (by default it starts in assistant mode, process file must exist in the process library)
 ```
-ros2 run pm_vision vision_assistant --ros-args -p launch_as_assistant:=False
+ros2 run pm_vision vision_assistant --ros-args -p launch_as_assistant:=False -p process_filename:=PROCESS_FILENAME.json
 
 ```
 ### Remap the node to start with a different camera config file
@@ -88,12 +88,20 @@ Tutorials for working with the assistant will be given here...
 ### Build a vision pipeline for images in a data base
 ...
 
+
+## 5. Using the Vision Assistant API
+Tutorials for working with the assistant API will be given here...
+### Build a new vision pipeline for a new task
+...
+### Build a vision pipeline for images in a data base
+...
+
+
 ## 5. To Do's
 * Conditions
 * Function yaml descriptions
 * cleaner code
-* Returns
-* camera coordinate system
+
 
 * GUI to build vision pipelines in json and to configure the vision asssistant.
 

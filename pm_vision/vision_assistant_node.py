@@ -208,6 +208,8 @@ class Vision_Assistant(Node):
       default_process_file_metadata_dict['id_process'] = 'default_ID'
       default_process_file_metadata_dict['File_created'] = str(datetime.now().strftime("%d_%m_%Y_%H_%M_%S"))
       default_process_file_metadata_dict['vision_pipeline'] = []
+      #Create folders if not existend
+      Path(os.path.dirname(self.process_file_path)).mkdir(parents=True, exist_ok=True)
       with open(self.process_file_path,"w+") as outputfile:
         json.dump(default_process_file_metadata_dict, outputfile)
     except Exception as e:
