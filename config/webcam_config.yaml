@@ -7,3 +7,9 @@ camera_params:
   camera_axis_1_angle: 0                # Starting from normal 'x' in math. positive direction
   camera_axis_2_angle: '+'              # '+' -> 90 degree; '-' -> -90 degree 
   subscription_topic: 'video_frames'
+  coaxial_light:
+    channel: 'message'
+    name: 'blabla/camera1_ring_light'
+    type: 'bool'
+    minVal: 100
+    maxVal: 0

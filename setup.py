@@ -1,7 +1,7 @@
 from setuptools import setup
 
 package_name = 'pm_vision'
-
+submodules = 'pm_vision/va_py_modules'
 setup(
     #author='Niklas Terei',
     #author_email='terei@match.uni-hannover.de',
@@ -9,7 +9,7 @@ setup(
     #maintainer_email='terei@match.uni-hannover.de',
     name=package_name,
     version='0.1.0',
-    packages=[package_name],
+    packages=[package_name, submodules],
     data_files=[
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),

@@ -141,7 +141,7 @@
         },
         {
             "HoughCircles": {
-                "active": true,
+                "active": false,
                 "draw_circles": true,
                 "method": "HOUGH_GRADIENT",
                 "dp": 50,
@@ -154,7 +154,7 @@
         },
         {
             "minEnclosingCircle": {
-                "active": true,
+                "active": false,
                 "draw_circles": true,
                 "mode": "RETR_EXTERNAL",
                 "method": "CHAIN_APPROX_SIMPLE"
