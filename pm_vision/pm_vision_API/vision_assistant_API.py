@@ -195,7 +195,6 @@ class vision_assistant_API:
         self.VisionOK_cross_val=False
         if image_display_time != None:
             self.image_display_time = image_display_time #default time
-            self.set_image_display_time_in_execution_mode(image_display_time)
 
         if process_file == None:
             self.current_process_file = self.default_processfile
@@ -215,6 +214,7 @@ class vision_assistant_API:
                 ' -p ' + 'launch_as_assistant:=False' + 
                 ' -p ' + 'process_UID:=' + str(current_process_id) +
                 ' -p ' + 'process_filename:=' + self.current_process_file + 
+                ' -p ' + 'image_display_time_in_execution_mode:=' + str(self.image_display_time) + 
                 ' -p ' + 'camera_config_filename:=' + self.current_camera_config_file )
         
         if not open_new_terminal:

@@ -65,13 +65,14 @@ class VisionAssistant(Node):
     Class constructor to set up the node
     """
     super().__init__('vision_assistant')
-
+    
     #Declare Parameter with default values
     self.declare_parameter('launch_as_assistant', True)      # 'execute_process'
     self.declare_parameter('process_filename','process_demo.json')
     self.declare_parameter('camera_config_filename','webcam_config.yaml')
     self.declare_parameter('db_cross_val_only', False)
     self.declare_parameter('process_UID','no_id_given')
+    self.declare_parameter('image_display_time_in_execution_mode',-1)
     self.declare_parameter('open_process_file', False)
     
     self.vision_filename = self.get_parameter('process_filename').value
@@ -83,10 +84,14 @@ class VisionAssistant(Node):
     #self.publisher_ = self.create_publisher(Image, 'video_frames', 10)
     # Create image subscriber
     self.launch_as_assistant = self.get_parameter('launch_as_assistant').value
+    self.image_display_time_in_execution_mode=self.get_parameter('image_display_time_in_execution_mode').value
+
     if self.launch_as_assistant:
       self.get_logger().info('Starting node in assistant mode!')
     else:
       self.get_logger().info('Starting node in processing mode!')
+      if self.image_display_time_in_execution_mode <= 0:
+        self.image_display_time_in_execution_mode = 5
 
     self.get_logger().info('Current vision process: ' + self.get_parameter('process_filename').value)
 
@@ -147,7 +152,6 @@ class VisionAssistant(Node):
       self.cross_validation=config["cross_validation"]
       self.show_image_on_error=config["show_image_on_error"]
       self.step_though_images=config["step_though_images"]
-      self.image_display_time_in_execution_mode=config["image_display_time_in_execution_mode"]*1000
       self.show_input_and_output_image=config["show_input_and_output_image"]
       self.scale_ouput_window_to_screen_size=config["scale_ouput_window_to_screen_size"]      
       f.close()
@@ -242,7 +246,13 @@ class VisionAssistant(Node):
   
   def save_vision_results(self, result_dict):
     result_meta_dict={}
-    vision_results_path = self.process_library_path + '/' + Path(self.process_file_path).stem + '_results.json' 
+    print(self.get_namespace())
+    if self.get_namespace() == '/':
+      ns_addon = ''
+    else:
+      ns_addon = '_' + self.get_namespace()
+    vision_results_path = self.process_library_path + '/' + Path(self.process_file_path).stem + '_results'+ ns_addon +'.json' 
+    print(vision_results_path)
     result_meta_dict['vision_process_name'] = self.get_parameter('process_filename').value
     result_meta_dict['exec_timestamp'] = str(datetime.now().strftime("%d_%m_%Y_%H_%M_%S"))
     result_meta_dict['vision_OK'] = self.VisionOK
