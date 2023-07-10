@@ -46,17 +46,23 @@ def process_image(self,received_frame,_process_pipeline_list):
       # Iterating through the json
         for key, function_parameter in list_item.items():
           match key:
+            case "Set_camera_exposure_time":
+              active = function_parameter['active']
+              value = function_parameter['value']
+              if active:
+                self.set_camera_exposure_time(value)
+                            
             case "threshold":
-                active = function_parameter['active']
-                thresh = function_parameter['thresh']
-                maxval = function_parameter['maxval']
-                type = function_parameter['type'] 
-                if active:
-                    _Command = "cv2." + type
-                    _,frame_processed = cv2.threshold(frame_processed,thresh,maxval,exec(_Command))
-                    print("Theshold executed")
-                    display_frame=self.adaptImagewithROI(display_frame,frame_processed)
-                    frame_buffer.append(frame_processed)
+              active = function_parameter['active']
+              thresh = function_parameter['thresh']
+              maxval = function_parameter['maxval']
+              type = function_parameter['type'] 
+              if active:
+                  _Command = "cv2." + type
+                  _,frame_processed = cv2.threshold(frame_processed,thresh,maxval,exec(_Command))
+                  print("Theshold executed")
+                  display_frame=self.adaptImagewithROI(display_frame,frame_processed)
+                  frame_buffer.append(frame_processed)
             case "adaptiveThreshold":
                 active = function_parameter['active']
                 maxValue = function_parameter['maxValue']

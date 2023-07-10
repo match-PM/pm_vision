@@ -5,6 +5,7 @@ from sensor_msgs.msg import Image # Image is the message type
 from cv_bridge import CvBridge # Package to convert between ROS and OpenCV Images
 import cv2 # OpenCV library
 import json
+from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
 from ament_index_python.packages import get_package_share_directory
 import numpy as np
 import os
@@ -19,6 +20,7 @@ import math
 from math import pi
 import time
 from pathlib import Path
+from pylon_ros2_camera_interfaces.srv import SetExposure
 import sys
 from pm_vision.va_py_modules.vision_processes import process_image
 from pm_vision.va_py_modules.vision_utils import image_resize, degrees_to_rads, rads_to_degrees, get_screen_resolution, rotate_image
@@ -74,7 +76,7 @@ class VisionAssistant(Node):
     self.declare_parameter('process_UID','no_id_given')
     self.declare_parameter('image_display_time_in_execution_mode',-1)
     self.declare_parameter('open_process_file', False)
-    
+    self.srv_callback_group = ReentrantCallbackGroup()
     self.vision_filename = self.get_parameter('process_filename').value
 
     package_share_directory = get_package_share_directory('pm_vision')
@@ -179,12 +181,32 @@ class VisionAssistant(Node):
       self.camera_axis_1_angle=config["camera_axis_1_angle"]
       self.camera_axis_2_angle=config["camera_axis_2_angle"]
       self.camera_subscription_topic = config["subscription_topic"]
+      self.exposure_time_interface_available = False
+
+      # Instanciating Exposure Time interface from yaml 
+      try:
+        if (config['exposure_time']['channel'] =='service'):
+          print(config['exposure_time']['name'])
+          service_name=str(config['exposure_time']['name'])
+          self.camera_exposure_time_srv = self.create_client(SetExposure,service_name,callback_group=self.srv_callback_group)
+          if not self.camera_exposure_time_srv.wait_for_service(timeout_sec=2.0):
+            self.logger.info('Exposure Time Service not available!')
+            raise
+          self.camera_exposure_time_type = config['exposure_time']['type']
+          self.camera_exposure_time_min_val = config['exposure_time']['min_val']
+          self.camera_exposure_time_max_val = config['exposure_time']['max_val']
+          self.exposure_time_interface_available = True
+      except Exception as e:
+        self.get_logger().error(str(e))
+        self.get_logger().warn('Error in configuring camera or no exposre time interface available!')
+
       # Calculate Camera parameter
       self.pixelPROum=self.magnification/self.pixelsize
       self.umPROpixel=self.pixelsize/self.magnification
       f.close()
       self.get_logger().info('Camera config loaded!')
-    except:
+    except Exception as e:
+      print(e)
       self.get_logger().error('Error opening camera config file: ' + str(self.camera_config_path+self.get_parameter('camera_config_filename').value)+ "!")
 
   def check_process_file_existence(self):
@@ -221,6 +243,33 @@ class VisionAssistant(Node):
     except Exception as e:
       print(e)
       self.get_logger().error("Error creating process file")
+
+  def set_camera_exposure_time(self,exposure_value):
+    print(exposure_value)
+    print(self.camera_exposure_time_max_val)
+    print(self.camera_exposure_time_min_val)
+    if self.exposure_time_interface_available:
+      if (exposure_value < self.camera_exposure_time_max_val) and (exposure_value > self.camera_exposure_time_min_val):
+        setting_request = SetExposure.Request()
+
+        if self.camera_exposure_time_type == 'float':
+          setting_request.target_exposure = float(exposure_value)
+        elif self.camera_exposure_time_type == 'int':
+          setting_request.target_exposure = int(exposure_value)
+
+        if not self.camera_exposure_time_srv.wait_for_service(timeout_sec=2.0):
+            self.get_logger().error('Spawn Service not available')
+        
+        response = self.camera_exposure_time_srv.call_async(setting_request)
+        response.result()
+        self.get_logger().info('Service call!!!!')
+        #response.success = True
+        return True 
+      else:
+        self.get_logger().error("Camera exposure time not set! Invalid bounds!")
+    else:
+      self.get_logger().warn("Camera exposure time not available!")
+      return False
 
   def load_process_file_metadata(self):
     try:

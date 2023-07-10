@@ -9,6 +9,12 @@
             }
         },
         {
+            "Set_camera_exposure_time": {
+                "active": true,
+                "value": 100.0
+            }
+        },
+        {
             "Draw_CS": {
                 "active": false
             }
