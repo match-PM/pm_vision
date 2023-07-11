@@ -124,11 +124,11 @@
         },
         {
             "select_Area": {
-                "active": false,
+                "active": true,
                 "mode": "RETR_LIST",
                 "method": "CHAIN_APPROX_SIMPLE",
                 "max_area": 450000,
-                "min_area": 100
+                "min_area": 1000000
             }
         },
         {

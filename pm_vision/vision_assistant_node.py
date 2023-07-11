@@ -19,11 +19,13 @@ from ament_index_python.packages import get_package_share_directory
 import math
 from math import pi
 import time
+from rclpy.executors import MultiThreadedExecutor, SingleThreadedExecutor
 from pathlib import Path
 from pylon_ros2_camera_interfaces.srv import SetExposure
 import sys
 from pm_vision.va_py_modules.vision_processes import process_image
 from pm_vision.va_py_modules.vision_utils import image_resize, degrees_to_rads, rads_to_degrees, get_screen_resolution, rotate_image
+from functools import partial
 
 # def get_screen_resolution():
 #    output = subprocess.Popen('xrandr | grep "\*" | cut -d " " -f4', shell=True, stdout=subprocess.PIPE).communicate()[0]
@@ -76,7 +78,12 @@ class VisionAssistant(Node):
     self.declare_parameter('process_UID','no_id_given')
     self.declare_parameter('image_display_time_in_execution_mode',-1)
     self.declare_parameter('open_process_file', False)
+
     self.srv_callback_group = ReentrantCallbackGroup()
+
+    self.group1 = MutuallyExclusiveCallbackGroup()
+    self.group2 = MutuallyExclusiveCallbackGroup()
+
     self.vision_filename = self.get_parameter('process_filename').value
 
     package_share_directory = get_package_share_directory('pm_vision')
@@ -175,6 +182,7 @@ class VisionAssistant(Node):
       FileData = yaml.load(f,Loader=SafeLoader)
       config=FileData["camera_params"]
       self.pixelsize=config["pixelsize"]
+      self.camera_id=config["cameraname"]
       self.magnification=config["magnification"]
       self.camera_axis_1=config["camera_axis_1"]
       self.camera_axis_2=config["camera_axis_2"]
@@ -188,13 +196,13 @@ class VisionAssistant(Node):
         if (config['exposure_time']['channel'] =='service'):
           print(config['exposure_time']['name'])
           service_name=str(config['exposure_time']['name'])
-          self.camera_exposure_time_srv = self.create_client(SetExposure,service_name,callback_group=self.srv_callback_group)
+          self.camera_exposure_time_srv = self.create_client(SetExposure,service_name)
           if not self.camera_exposure_time_srv.wait_for_service(timeout_sec=2.0):
-            self.logger.info('Exposure Time Service not available!')
-            raise
+            raise Exception('Exposure Time Service not available!') 
           self.camera_exposure_time_type = config['exposure_time']['type']
           self.camera_exposure_time_min_val = config['exposure_time']['min_val']
           self.camera_exposure_time_max_val = config['exposure_time']['max_val']
+          self.camera_exposure_time_set_value = None
           self.exposure_time_interface_available = True
       except Exception as e:
         self.get_logger().error(str(e))
@@ -245,31 +253,46 @@ class VisionAssistant(Node):
       self.get_logger().error("Error creating process file")
 
   def set_camera_exposure_time(self,exposure_value):
-    print(exposure_value)
-    print(self.camera_exposure_time_max_val)
-    print(self.camera_exposure_time_min_val)
+
     if self.exposure_time_interface_available:
       if (exposure_value < self.camera_exposure_time_max_val) and (exposure_value > self.camera_exposure_time_min_val):
-        setting_request = SetExposure.Request()
+        if (self.camera_exposure_time_set_value != exposure_value):
+          client_test=self.camera_exposure_time_srv
+          print(exposure_value)
+          print(self.camera_exposure_time_max_val)
+          print(self.camera_exposure_time_min_val)
+          self.get_logger().error("CHANGGGEE DETEECCTED")
+          setting_request = SetExposure.Request()
+          print(setting_request.get_fields_and_field_types())
 
-        if self.camera_exposure_time_type == 'float':
-          setting_request.target_exposure = float(exposure_value)
-        elif self.camera_exposure_time_type == 'int':
-          setting_request.target_exposure = int(exposure_value)
+          if self.camera_exposure_time_type == 'float':
+            setting_request.target_exposure = float(exposure_value)
+          elif self.camera_exposure_time_type == 'int':
+            setting_request.target_exposure = int(exposure_value)
 
-        if not self.camera_exposure_time_srv.wait_for_service(timeout_sec=2.0):
-            self.get_logger().error('Spawn Service not available')
-        
-        response = self.camera_exposure_time_srv.call_async(setting_request)
-        response.result()
-        self.get_logger().info('Service call!!!!')
-        #response.success = True
-        return True 
+          if not client_test.wait_for_service(timeout_sec=2.0):
+              self.get_logger().error('Spawn Service not available')
+          
+          future = client_test.call_async(setting_request)
+          future.add_done_callback(partial(self.callback_set))
+
+          #self.future.result()
+          self.camera_exposure_time_set_value = exposure_value
+          self.get_logger().info('Service call!!!!')
+          #response.success = True
+          return True 
       else:
         self.get_logger().error("Camera exposure time not set! Invalid bounds!")
     else:
       self.get_logger().warn("Camera exposure time not available!")
       return False
+  
+  def callback_set(self,future):
+    try:
+      response = future.result()
+      self.get_logger().info("Exposure Time Set")
+    except Exception as e:
+      self.get_logger().error("error")
 
   def load_process_file_metadata(self):
     try:
@@ -295,13 +318,7 @@ class VisionAssistant(Node):
   
   def save_vision_results(self, result_dict):
     result_meta_dict={}
-    print(self.get_namespace())
-    if self.get_namespace() == '/':
-      ns_addon = ''
-    else:
-      ns_addon = '_' + self.get_namespace()
-    vision_results_path = self.process_library_path + '/' + Path(self.process_file_path).stem + '_results'+ ns_addon +'.json' 
-    print(vision_results_path)
+    vision_results_path = self.process_library_path + '/' + Path(self.process_file_path).stem + '_results_'+ self.camera_id +'.json' 
     result_meta_dict['vision_process_name'] = self.get_parameter('process_filename').value
     result_meta_dict['exec_timestamp'] = str(datetime.now().strftime("%d_%m_%Y_%H_%M_%S"))
     result_meta_dict['vision_OK'] = self.VisionOK
@@ -1053,7 +1070,8 @@ def main(args=None):
   
   # Create the node
   vision_assistant = VisionAssistant()
-  
+  #executor = MultiThreadedExecutor(num_threads=2)
+  #executor.add_node(vision_assistant)
   # Spin the node so the callback function is called.
   if vision_assistant.launch_as_assistant:
     # Run vision callback function continiously
