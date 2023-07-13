@@ -43,7 +43,8 @@ class VisionAssistant(Node):
     self.declare_parameter('db_cross_val_only', False)
     self.declare_parameter('process_UID','no_id_given')
     self.declare_parameter('image_display_time_in_execution_mode',-1)
-    self.declare_parameter('open_process_file', False)
+    self.declare_parameter('open_process_file', False)      # if set to true the process file is opened in vs code
+    self.declare_parameter('cross_validate_in_execution', False)
 
     self.srv_callback_group = ReentrantCallbackGroup()
 
@@ -124,9 +125,16 @@ class VisionAssistant(Node):
       f = open(self.vision_assistant_config)
       FileData = yaml.load(f,Loader=SafeLoader)
       config=FileData["vision_assistant_config"]
-      self.cross_validation=config["cross_validation"]
-      self.show_image_on_error=config["show_image_on_error"]
-      self.step_though_images=config["step_though_images"]
+      # The setting for crossvalidation is set from yaml for assistant mode and via parameter (default False) for execution mode
+      if not self.launch_as_assistant:
+        self.cross_validation = self.get_parameter('cross_validate_in_execution').value
+        self.show_image_on_error = False
+        self.step_though_images = False
+      else:
+        self.cross_validation=config["cross_validation"]
+        self.show_image_on_error=config["show_image_on_error"]
+        self.step_though_images=config["step_though_images"]
+
       self.show_input_and_output_image=config["show_input_and_output_image"]
       self.scale_ouput_window_to_screen_size=config["scale_ouput_window_to_screen_size"]      
       f.close()

@@ -40,6 +40,10 @@ camera_config_path
 vision_assistant_config
 ```
 The pathes you insert in this config file specify where the vision assitant looks for the assistant configuration, processes and camera configs and where to save images. You can specify any path here. Make sure the assistant finds the respective files in that locations. The vision_assistant_path_config.yaml should not be removed! The File is added to .gitignore to prevent file changes when pulling from origin.
+* Prevent git from making changes to your config:
+```
+git update-index --assume-unchanged config/vision_assistant_path_config.yaml
+```
 * Build your workspace:
 ```
 colcon build 

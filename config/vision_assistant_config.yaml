@@ -1,7 +1,7 @@
 vision_assistant_config:
-  cross_validation: false
-  image_display_time_in_execution_mode: 5
+  cross_validation: false                         # only affects assistant mode
+  image_display_time_in_execution_mode: 5         # only affects assistant mode
   scale_ouput_window_to_screen_size: true
-  show_image_on_error: false
+  show_image_on_error: false                      # only affects assistant mode; show image on error only possible in assistant mode
   show_input_and_output_image: true
-  step_though_images: true
+  step_though_images: true                        # only affects assistant mode; step though images only possible in assistant mode
