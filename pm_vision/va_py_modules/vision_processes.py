@@ -266,7 +266,8 @@ def process_image(self,received_frame,_process_pipeline_list):
                   if not self.VisionOK:
                     self.VisionOK = False
                     self.counter_error_cross_val += 1
-                    print("No matching Area")
+                    frame_processed = np.zeros((frame_processed.shape[0], frame_processed.shape[1]), dtype = np.uint8)
+                    self.get_logger().error("Select Area: No matching area")
                   display_frame=self.adaptImagewithROI(display_frame,frame_processed)
                   frame_buffer.append(frame_processed)
                   print("select_Area executed")
@@ -395,6 +396,11 @@ def process_image(self,received_frame,_process_pipeline_list):
                         image_to_save = frame_processed
                     cv2.imwrite(image_name,image_to_save)
                     print("Image saved!")
+
+                  if (not self.cross_val_running or save_in_cross_val):
+                    Save_image_results_dict={"Image saved:": image_name}
+                    vision_results_list.append(Save_image_results_dict)
+
                   print("save_image executed")
                     
             case "Draw_Grid_without_rotation":
@@ -425,7 +431,8 @@ def process_image(self,received_frame,_process_pipeline_list):
               
               if active:
                 Grid_frame = np.zeros((received_frame.shape[0]+received_frame.shape[1], received_frame.shape[0]+received_frame.shape[1], 3), dtype = np.uint8)
-                numb = int(round((Grid_frame.shape[0]/2)/grid_spacing*self.pixelPROum))+1
+                #numb = int(round((Grid_frame.shape[0]/2)/grid_spacing*self.pixelPROum))+1 # This is a bug
+                numb = int(round((self.FOV_width/2)/grid_spacing))+1
 
                 cv2.line(Grid_frame, (int(Grid_frame.shape[1]/2), 0),(int(Grid_frame.shape[1]/2), Grid_frame.shape[1]), (255, 0, 0), 1, 1)
                 cv2.line(Grid_frame, (0,int(Grid_frame.shape[0]/2)),(int(Grid_frame.shape[1]), int(Grid_frame.shape[0]/2)), (255, 0, 0), 1, 1)
